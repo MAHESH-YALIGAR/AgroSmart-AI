@@ -1,0 +1,100 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Environment Variables
+.env
+.env.*
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Ruff
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# SQLite
+*.sqlite3
+*.db
+
+# Uploaded files
+uploads/
+temp/
+tmp/
+
+# Models (if downloaded automatically)
+models/
+weights/
+
+# InsightFace models
+.insightface/
+
+# ONNX models
+*.onnx
+
+# YOLO weights
+*.pt
+
+# TensorFlow
+*.h5
+
+# Torch cache
+.torch/
+
+# HuggingFace cache
+.huggingface/
+.cache/
+
+# LangSmith (if using local config)
+langsmith.env
+
+# Coverage
+coverage/
+
+# Uvicorn
+uvicorn.log
+
+# PyCharm
+*.iml
