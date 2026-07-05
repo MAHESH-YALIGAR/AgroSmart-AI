@@ -16,7 +16,7 @@ import {
   Pressable,
 } from "react-native";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
-const BACKEND_API = process.env.EXPO_PUBLIC_PYTHON_BACKEND_API || "http://10.84.94.122:8000";
+const BACKEND_API = process.env.EXPO_PUBLIC_PYTHON_BACKEND_API || "http://192.168.244.122:8000";
 console.log("PYTHON BACKEND API:", BACKEND_API);
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.78;

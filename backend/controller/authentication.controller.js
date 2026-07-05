@@ -84,59 +84,7 @@ exports.sendOtp = async (req, res) => {
 
 
 
-// exports.signup = async (req, res) => {
-//   try {
-//     const { name, email, password, otp } = req.body;
 
-//     const otpRecord = await Otp.findOne({ email }).sort({ createdAt: -1 });
-
-//     if (!otpRecord) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "OTP Not Found",
-//       });
-//     }
-
-//     if (otpRecord.otp !== otp) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid OTP",
-//       });
-//     }
-
-//     const hashedPassword = await bcrypt.hash(password, 10);
-
-//     const user = await User.create({
-//       name,
-//       email: email.toLowerCase().trim(),
-//       password: hashedPassword,
-//     });
-
-//     // FIX: Standardized token payload to match the login architecture
-//     const token = jwt.sign(
-//       { userId: user._id, email: user.email },
-//       process.env.JWT_SECRET,
-//       { expiresIn: "7d" }
-//     );
-
-//     return res.status(201).json({
-//       success: true,
-//       token,
-//       message: "Account Created",
-//       user: {
-//         id: user._id,
-//         name: user.name,
-//         email: user.email
-//       }
-//     });
-//   } catch (error) {
-//     console.error("Signup System Error:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Signup Failed",
-//     });
-//   }
-// };
 const axios = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");

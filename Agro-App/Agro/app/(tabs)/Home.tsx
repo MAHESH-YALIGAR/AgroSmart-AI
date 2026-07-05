@@ -31,7 +31,7 @@ const Home = () => {
   const { user } =
     useContext(UserContext);
 
-    console.log("this is  from the user data in home.tsx ",user._id)
+    // console.log("this is  from the user data in home.tsx ",user._id)
 
   return (
     <View className="flex-1 bg-gray-100">

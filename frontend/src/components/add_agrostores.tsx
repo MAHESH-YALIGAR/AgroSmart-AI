@@ -23,6 +23,7 @@ import {
   Sprout,
 } from "lucide-react";
 import { locationData } from "../data/locationData";
+// const BACKEND_API = import.meta.env.VITE_BACKEND_API;
 const BACKEND_API = import.meta.env.VITE_BACKEND_API;
 
 // ---------------------------------------------------------------------------

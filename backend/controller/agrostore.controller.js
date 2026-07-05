@@ -53,6 +53,7 @@ exports.createAgroStore = async (req, res) => {
 
     res.status(201).json({ success: true, data: agroStore });
   } catch (error) {
+    console.log(" this is from  the agro store file ",error)
     res.status(400).json({ success: false, message: error.message });
   }
 };

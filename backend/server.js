@@ -12,11 +12,11 @@ app.use(express.json()); // Parses incoming JSON request bodies
 // Imported Routes
 const authrouter = require("./router/user.routes");
 const alertrouter = require("./router/services.routes");
-const webrouter=require("./router/web.routes")
+const webrouter = require("./router/web.routes")
 // Route Middleware
 app.use("/api/v1/auth", authrouter);
 app.use("/api/v1/weather", alertrouter);
-app.use("/api/v1/webrouter",webrouter)
+app.use("/api/v1/webrouter", webrouter)
 
 // Mongoose Connection
 mongoose.connect(process.env.MONGO_URI)
@@ -32,6 +32,12 @@ app.get("/", (req, res) => {
   console.log("Backend is running correctly");
   res.send("Backend is running correctly");
 });
-app.listen(PORT, () => {
-  console.log(`Server is running at: http://localhost:${PORT}`);
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`===================================================`);
+  console.log(`🚀 LOCAL BACKEND: http://localhost:${PORT}`);
+
+  console.log(`===================================================`);
 });
+
+
