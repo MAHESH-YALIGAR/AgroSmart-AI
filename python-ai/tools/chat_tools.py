@@ -1,14 +1,15 @@
 import requests
-
+import os
+import requests
 from langchain_core.tools import tool
+from langchain.tools import tool
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import ToolNode
-from pymongo import MongoClient
-MONGO_URI = os.getenv("MONGO_URI")
+from mongo_client import Mongo_client
 
-client = MongoClient(MONGO_URI)
-db = client["Agro-Smart-Ai"]      # Database name
-market_collection = db["agrostores"] # Collection name
+db = Mongo_client["Agro-Smart-Ai"]  # Database name
+
+
 @tool
 def get_weather(
     lat: float,
@@ -41,14 +42,6 @@ def get_weather(
 
     return response.json()
 
-import os
-import requests
-from langchain.tools import tool
-
-import os
-import requests
-from langchain_core.tools import tool
-
 
 @tool
 def get_market_prices(
@@ -58,7 +51,7 @@ def get_market_prices(
     commodity: str,
 ) -> dict:
     """
-    Fetch real-time mandi prices.
+    Fetch real-time mandi prices from data.gov.in.
 
     Required Parameters:
     - state
@@ -66,18 +59,28 @@ def get_market_prices(
     - market
     - commodity
 
-    Only call this tool after collecting all four parameters.
+    Example:
+    state = Karnataka
+    district = Haveri
+    market = Haveri
+    commodity = Tomato
     """
 
-    url = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
+    API_URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
 
     api_key = os.getenv("DATA_GOV_API_KEY")
 
     if not api_key:
         return {
             "status": "error",
-            "message": "DATA_GOV_API_KEY is not configured."
+            "message": "DATA_GOV_API_KEY environment variable is not configured.",
         }
+
+    # Remove extra spaces
+    state = state.strip()
+    district = district.strip()
+    market = market.strip()
+    commodity = commodity.strip()
 
     params = {
         "api-key": api_key,
@@ -90,56 +93,93 @@ def get_market_prices(
     }
 
     try:
-        response = requests.get(url, params=params, timeout=15)
+
+        print("\n========== TOOL CALLED ==========")
+        print("State     :", state)
+        print("District  :", district)
+        print("Market    :", market)
+        print("Commodity :", commodity)
+        print("=================================\n")
+
+        response = requests.get(API_URL, params=params, timeout=20)
+
+        print("Status Code :", response.status_code)
+
         response.raise_for_status()
 
         data = response.json()
+
+        print("\nComplete API Response:")
+        print(data)
+
         records = data.get("records", [])
 
-        if not records:
+        print(f"\nTotal Records Found : {len(records)}")
+
+        if len(records) == 0:
             return {
                 "status": "not_found",
-                "message": f"No market price found for {commodity} in {market}, {district}, {state}.",
+                "message": f"No market price found for '{commodity}' in '{market}', '{district}', '{state}'.",
+                "query": {
+                    "state": state,
+                    "district": district,
+                    "market": market,
+                    "commodity": commodity,
+                },
             }
+
+        simplified_records = []
+
+        for record in records:
+            simplified_records.append(
+                {
+                    "state": record.get("state"),
+                    "district": record.get("district"),
+                    "market": record.get("market"),
+                    "commodity": record.get("commodity"),
+                    "variety": record.get("variety"),
+                    "arrival_date": record.get("arrival_date"),
+                    "min_price": record.get("min_price"),
+                    "max_price": record.get("max_price"),
+                    "modal_price": record.get("modal_price"),
+                }
+            )
 
         return {
             "status": "success",
-            "count": len(records),
-            "data": records,
+            "count": len(simplified_records),
+            "data": simplified_records,
         }
 
     except requests.exceptions.Timeout:
-        return {
-            "status": "error",
-            "message": "The market price service timed out."
-        }
+        return {"status": "error", "message": "The request timed out."}
+
+    except requests.exceptions.HTTPError as e:
+        return {"status": "error", "message": f"HTTP Error: {e}"}
 
     except requests.exceptions.RequestException as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": f"Request Error: {e}"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
-tools = [get_weather, get_market_prices]
-tool_node = ToolNode(tools)  # Executes tool calls
-
-
-
-
-# //this is for the get the experts 
+# //this is for the get the experts
 
 
 expert_collection = db["experts"]
 
+import json
+from langchain_core.runnables import RunnableConfig
 
-@tool
+
 def get_agriculture_experts(
-    crop: str,
-    latitude: float,
-    longitude: float,
-    max_distance_km: float = 30
-):
+    config: RunnableConfig,
+    crop: str = "",  # Added default to prevent missing parameter errors
+    latitude: float = 0.0,  # Fixes the 400 error by ensuring it accepts a number default
+    longitude: float = 0.0,  # Fixes the 400 error by ensuring it accepts a number default
+    max_distance_km: float = 30,
+) -> str:  # Indicating it now returns a JSON string
     """
     Returns nearby agriculture experts for a crop.
 
@@ -150,147 +190,152 @@ def get_agriculture_experts(
         max_distance_km: Search radius in KM
 
     Returns:
-        List of nearby agriculture experts.
+        JSON string containing a list of nearby agriculture experts.
     """
+    # Extract location from frontend configuration context
+    configurable = config.get("configurable", {})
+    lat = configurable.get("latitude", latitude)
+    lon = configurable.get("longitude", longitude)
 
-    experts = expert_collection.aggregate([
-        {
-            "$geoNear": {
-                "near": {
-                    "type": "Point",
-                    "coordinates": [longitude, latitude]
-                },
-                "distanceField": "distance",
-                "maxDistance": max_distance_km * 1000,
-                "spherical": True,
-                "query": {
-                    "crop": {
-                        "$regex": crop,
-                        "$options": "i"
-                    },
-                    "isActive": True
-                }
-            }
-        },
-        {
-            "$project": {
-                "_id": 0,
-                "name": 1,
-                "phone": 1,
-                "email": 1,
-                "crop": 1,
-                "experience": 1,
-                "description": 1,
-                "state": 1,
-                "district": 1,
-                "taluka": 1,
-                "place": 1,
-                "distance": {
-                    "$round": [
-                        {
-                            "$divide": [
-                                "$distance",
-                                1000
-                            ]
+    print("Expert search Latitude:", lat)
+    print("Expert search Longitude:", lon)
+
+    # Build basic query
+    query = {"isActive": True}
+
+    # Only filter by crop if a valid string is provided
+    if crop and crop.strip() and crop.lower() != "unknown":
+        query["crop"] = {"$regex": crop.strip(), "$options": "i"}
+
+    # Execute MongoDB geo-aggregation pipeline
+    experts = list(
+        expert_collection.aggregate(
+            [
+                {
+                    "$geoNear": {
+                        "near": {
+                            "type": "Point",
+                            "coordinates": [float(lon), float(lat)],
                         },
-                        2
-                    ]
-                }
-            }
-        }
-    ])
+                        "distanceField": "distance",
+                        "maxDistance": max_distance_km * 1000,
+                        "spherical": True,
+                        "query": query,
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "name": 1,
+                        "phone": 1,
+                        "email": 1,
+                        "crop": 1,
+                        "location": {"coordinates": [75.1383, 14.8804]},
+                        "experience": 1,
+                        "description": 1,
+                        "state": 1,
+                        "district": 1,
+                        "taluka": 1,
+                        "place": 1,
+                        "distance": {"$round": [{"$divide": ["$distance", 1000]}, 2]},
+                    }
+                },
+            ]
+        )
+    )
 
-    return list(experts)
+    # Convert the Python list of dictionaries into a valid JSON string output
+    return json.dumps(experts, indent=2, ensure_ascii=False)
 
 
-//this is for the get the agro store information 
+# //this is for the get the agro store information
 
-from langchain.tools import tool
-from pymongo import MongoClient
-import os
 
-client = MongoClient(os.getenv("MONGO_URI"))
+# client = MongoClient(os.getenv("MONGO_URI"))
 
-db = client["Agro-Smart-Ai"]
 
 store_collection = db["agrostores"]
+
+import json
 
 
 @tool
 def get_agro_store(
-    product: str,
     latitude: float,
     longitude: float,
-    max_distance_km: float = 30
+    config: RunnableConfig,
+    product: str = "",
+    max_distance_km: float = 100,
+    limit: int = 5,
 ):
     """
-    Returns nearby agro stores where a product is available.
+    Returns nearby agro stores.
 
-    Args:
-        product: Product name (Urea, DAP, Confidor...)
-        latitude: User latitude
-        longitude: User longitude
-        max_distance_km: Search radius in KM
+    If product is provided:
+        Returns nearby stores where that product is available.
 
-    Returns:
-        Nearby agro stores.
+    If product is empty:
+        Returns all nearby agro stores.
     """
+    # 1. Safely extract coordinates from config, falling back to arguments if missing
+    configurable = config.get("configurable", {})
+    lat = configurable.get("latitude", latitude)
+    lon = configurable.get("longitude", longitude)
 
-    stores = store_collection.aggregate([
-        {
-            "$geoNear": {
-                "near": {
-                    "type": "Point",
-                    "coordinates": [longitude, latitude]
-                },
-                "distanceField": "distance",
-                "maxDistance": max_distance_km * 1000,
-                "spherical": True,
-                "query": {
-                    "isActive": True,
-                    "products": {
-                        "$elemMatch": {
-                            "product": {
-                                "$regex": product,
-                                "$options": "i"
-                            },
-                            "availability": "Available"
-                        }
-                    }
-                }
-            }
-        },
-        {
-            "$project": {
-                "_id": 0,
-                "storeName": 1,
-                "ownerName": 1,
-                "mobile": 1,
-                "address": 1,
-                "openingTime": 1,
-                "closingTime": 1,
-                "state": 1,
-                "district": 1,
-                "taluka": 1,
-                "place": 1,
-                "location": 1,
-                "distance": {
-                    "$round": [
-                        {
-                            "$divide": [
-                                "$distance",
-                                1000
-                            ]
-                        },
-                        2
-                    ]
-                }
+    print("agro store Latitude:", lat)
+    print("agro store Longitude:", lon)
+
+    # 2. Build base query
+    query = {"isActive": True}
+
+    # 3. Only filter by product if a non-empty string is provided
+    if product and product.strip():
+        query["products"] = {
+            "$elemMatch": {
+                "product": {"$regex": product.strip(), "$options": "i"},
+                "availability": "Available",
             }
         }
-    ])
 
-    return list(stores)
+    # 4. Aggregation pipeline (OUTSIDE the if-block so it always executes)
+    stores = list(
+        store_collection.aggregate(
+            [
+                {
+                    "$geoNear": {
+                        "near": {
+                            "type": "Point",
+                            "coordinates": [float(lon), float(lat)],
+                        },
+                        "distanceField": "distance",
+                        "maxDistance": max_distance_km * 1000,
+                        "spherical": True,
+                        "query": query,
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "storeName": 1,
+                        "ownerName": 1,
+                        "location": {"coordinates": [75.1383, 14.8804]},
+                        "mobile": 1,
+                        "address": 1,
+                        "openingTime": 1,
+                        "closingTime": 1,
+                        "distance": {"$round": [{"$divide": ["$distance", 1000]}, 2]},
+                    }
+                },
+                {"$limit": limit},
+            ]
+        )
+    )
+    print("stores info",stores)
+    return json.dumps(stores, indent=2)
 
+
+tools = [get_weather, get_market_prices, get_agro_store, get_agriculture_experts]
+tool_node = ToolNode(tools)  # Executes tool calls
 # get the govt schems and  services
 # get connect the agro expert
 # agro  stores  nearby located

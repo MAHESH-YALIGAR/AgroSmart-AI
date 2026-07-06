@@ -14,6 +14,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Image,
+  Linking,
 } from "react-native";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 const BACKEND_API = process.env.EXPO_PUBLIC_PYTHON_BACKEND_API || "http://192.168.244.122:8000";
@@ -21,10 +23,116 @@ console.log("PYTHON BACKEND API:", BACKEND_API);
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.78;
 
+const resolveStructuredReply = (reply: any) => {
+  const sourceText =
+    typeof reply === "string"
+      ? reply
+      : reply?.reply || reply?.message || "";
+
+  const parseJson = (value: string) => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const parsedReply =
+    typeof sourceText === "string" && sourceText.trim().length > 0
+      ? parseJson(sourceText.trim())
+      : null;
+
+  const payload = parsedReply ?? reply;
+  const responseType = payload?.type || "text";
+  const responseData = Array.isArray(payload?.data) ? payload.data : [];
+
+  if (responseType === "expert" || responseType === "experts") {
+    return {
+      kind: "experts" as const,
+      text: sourceText || "Here are some agro experts near you.",
+      data: responseData,
+    };
+  }
+
+  if (responseType === "agro_store" || responseType === "stores") {
+    return {
+      kind: "stores" as const,
+      text: sourceText || "Here are some agro stores near you.",
+      data: responseData,
+    };
+  }
+
+  if (payload && typeof payload === "object") {
+    if (Array.isArray(payload.experts)) {
+      return {
+        kind: "experts" as const,
+        text: sourceText || "Here are some agro experts near you.",
+        data: payload.experts,
+      };
+    }
+
+    if (Array.isArray(payload.stores)) {
+      return {
+        kind: "stores" as const,
+        text: sourceText || "Here are some agro stores near you.",
+        data: payload.stores,
+      };
+    }
+
+    if (Array.isArray(payload.results)) {
+      const experts = payload.results.filter((item: any) => item?.expert || item?.cropSpecialization || item?.experienceYears);
+      if (experts.length > 0) {
+        return {
+          kind: "experts" as const,
+          text: sourceText || "Here are some agro experts near you.",
+          data: experts,
+        };
+      }
+
+      const stores = payload.results.filter((item: any) => item?.storeName || item?.ownerName || item?.openingTime || item?.closingTime);
+      if (stores.length > 0) {
+        return {
+          kind: "stores" as const,
+          text: sourceText || "Here are some agro stores near you.",
+          data: stores,
+        };
+      }
+    }
+  }
+
+  const normalizedText = (sourceText || "").toLowerCase();
+  if (normalizedText.includes("experts")) {
+    return {
+      kind: "experts" as const,
+      text: sourceText || "Here are some agro experts near you.",
+      data: [],
+    };
+  }
+
+  if (normalizedText.includes("stores")) {
+    return {
+      kind: "stores" as const,
+      text: sourceText || "Here are some agro stores near you.",
+      data: [],
+    };
+  }
+
+  return {
+    kind: "text" as const,
+    text:
+      typeof reply === "string"
+        ? reply
+        : reply?.reply || reply?.message || "Sorry, I couldn't process that response.",
+    data: [],
+  };
+};
+
 type MessageItem = {
   id: string;
   type: "user" | "assistant";
   text: string;
+  kind?: "text" | "experts" | "stores";
+  data?: any[];
 };
 
 const ChatScreen = () => {
@@ -76,11 +184,17 @@ const ChatScreen = () => {
   const openSidebar = useCallback(() => setSidebarOpen(true), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  const pushMessage = (text: string, type: "user" | "assistant") => {
+  const pushMessage = (
+    text: string,
+    type: "user" | "assistant",
+    options?: { kind?: MessageItem["kind"]; data?: any[] }
+  ) => {
     const newMessage = {
       id: `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type,
       text,
+      kind: options?.kind ?? "text",
+      data: options?.data,
     };
     setMessages((prev) => [...prev, newMessage]);
   };
@@ -123,12 +237,13 @@ const ChatScreen = () => {
 
       console.log("AI Response:", response.data);
 
-      const replyText =
-        response?.data?.reply ||
-        response?.data?.message ||
-        "Sorry, I couldn't process that response.";
+      const responsePayload = response?.data;
+      const structuredReply = resolveStructuredReply(responsePayload);
 
-      pushMessage(replyText, "assistant");
+      pushMessage(structuredReply.text, "assistant", {
+        kind: structuredReply.kind,
+        data: structuredReply.data,
+      });
     } catch (error: any) {
       console.log("FULL ERROR");
       console.log(error?.message);
@@ -155,19 +270,177 @@ const ChatScreen = () => {
     </TouchableOpacity>
   ), [closeSidebar]);
 
-  const renderMessageItem = useCallback(({ item }: { item: MessageItem }) => (
-    <View
-      className={
-        item.type === "user"
-          ? "self-end bg-green-600 p-4 rounded-3xl mb-3 max-w-[80%]"
-          : "self-start bg-gray-100 p-4 rounded-3xl mb-3 max-w-[80%]"
+  const openGoogleMaps = useCallback((latitude?: number | string, longitude?: number | string) => {
+    const parsedLatitude = Number(latitude);
+    const parsedLongitude = Number(longitude);
+
+    if (!Number.isFinite(parsedLatitude) || !Number.isFinite(parsedLongitude)) {
+      return;
+    }
+
+    Linking.openURL(
+      `https://www.google.com/maps/search/?api=1&query=${parsedLatitude},${parsedLongitude}`
+    );
+  }, []);
+
+  const openPhoneDialer = useCallback((phoneNumber?: string) => {
+    if (!phoneNumber) {
+      return;
+    }
+
+    Linking.openURL(`tel:${phoneNumber}`);
+  }, []);
+
+  const renderMessageItem = useCallback(({ item }: { item: MessageItem }) => {
+    const getCoordinates = (entry: any) => {
+      const location = entry?.location;
+
+      if (Array.isArray(location?.coordinates) && location.coordinates.length >= 2) {
+        return {
+          latitude: location.coordinates[1],
+          longitude: location.coordinates[0],
+        };
       }
-    >
-      <Text className={item.type === "user" ? "text-white" : "text-gray-900"}>
-        {item.text}
-      </Text>
-    </View>
-  ), []);
+
+      if (location && typeof location === "object") {
+        return {
+          latitude: location?.latitude ?? location?.lat ?? entry?.latitude ?? entry?.lat,
+          longitude: location?.longitude ?? location?.lng ?? entry?.longitude ?? entry?.lng,
+        };
+      }
+
+      return {
+        latitude: entry?.latitude ?? entry?.lat,
+        longitude: entry?.longitude ?? entry?.lng,
+      };
+    };
+    const isAssistantStructured =
+      item.type === "assistant" && item.kind !== "text" && Array.isArray(item.data) && item.data.length > 0;
+
+    return (
+      <View
+        className={
+          item.type === "user"
+            ? "self-end bg-green-600 p-4 rounded-3xl mb-3 max-w-[80%]"
+            : isAssistantStructured
+            ? "self-start bg-transparent rounded-3xl mb-3 w-[92%]"
+            : "self-start bg-gray-100 p-4 rounded-3xl mb-3 max-w-[80%]"
+        }
+      >
+        {isAssistantStructured ? (
+          <View className="w-full">
+            <Text className="text-gray-900 font-semibold mb-3">{item.text}</Text>
+            {(item.data || []).map((entry: any, index: number) => {
+              if (item.kind === "experts") {
+                const expert = entry;
+                const expertPhoto = expert?.photo || expert?.image || expert?.imageUrl || expert?.photoUrl;
+                const expertName = expert?.name || expert?.expertName || expert?.fullName || "Agro Expert";
+                const specialization = expert?.cropSpecialization || expert?.specialization || expert?.crop || "Agriculture";
+                const experience = expert?.experienceYears || expert?.experience || expert?.yearsOfExperience || "—";
+                const phoneNumber = expert?.phoneNumber || expert?.phone || expert?.contactNumber || expert?.mobile || "—";
+                const address = expert?.address || [expert?.state, expert?.district, expert?.taluka, expert?.place].filter(Boolean).join(", ") || "—";
+                const distance = expert?.distance || expert?.distanceKm || expert?.distanceFromUser || "—";
+                const { latitude, longitude } = getCoordinates(expert);
+
+                return (
+                  <View key={`${item.id}-expert-${index}`} className="bg-white rounded-2xl border border-gray-200 p-4 mb-3">
+                    <View className="flex-row items-start">
+                      {expertPhoto ? (
+                        <Image source={{ uri: expertPhoto }} className="w-16 h-16 rounded-full mr-3" />
+                      ) : (
+                        <View className="w-16 h-16 rounded-full bg-green-100 items-center justify-center mr-3">
+                          <Ionicons name="person" size={24} color="#16A34A" />
+                        </View>
+                      )}
+                      <View className="flex-1">
+                        <Text className="text-base font-semibold text-gray-900">{expertName}</Text>
+                        <Text className="text-sm text-green-700 mt-1">{specialization}</Text>
+                        <Text className="text-sm text-gray-600 mt-1">Experience: {experience} years</Text>
+                      </View>
+                    </View>
+
+                    <View className="mt-3 space-y-1">
+                      <Text className="text-sm text-gray-700">📞 {phoneNumber}</Text>
+                      <Text className="text-sm text-gray-700">📍 {address}</Text>
+                      <Text className="text-sm text-gray-700">🧭 Distance: {distance}</Text>
+                    </View>
+
+                    <View className="flex-row mt-4">
+                      <TouchableOpacity
+                        className="flex-1 bg-green-600 rounded-xl py-2.5 mr-2"
+                        onPress={() => openGoogleMaps(latitude, longitude)}
+                      >
+                        <Text className="text-white text-center font-semibold">📍 View Location</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        className="flex-1 bg-gray-900 rounded-xl py-2.5 ml-2"
+                        onPress={() => openPhoneDialer(phoneNumber)}
+                      >
+                        <Text className="text-white text-center font-semibold">📞 Call</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }
+
+              const store = entry;
+              const storeLogo = store?.logo || store?.storeLogo || store?.image || store?.imageUrl;
+              const storeName = store?.storeName || store?.name || store?.shopName || "Agro Store";
+              const ownerName = store?.ownerName || store?.owner || store?.owner_name || "—";
+              const phoneNumber = store?.phoneNumber || store?.phone || store?.contactNumber || store?.mobile || "—";
+              const address = store?.address || [store?.state, store?.district, store?.taluka, store?.place].filter(Boolean).join(", ") || "—";
+              const openingTime = store?.openingTime || store?.openTime || "—";
+              const closingTime = store?.closingTime || store?.closeTime || "—";
+              const distance = store?.distance || store?.distanceKm || store?.distanceFromUser || "—";
+              const { latitude, longitude } = getCoordinates(store);
+
+              return (
+                <View key={`${item.id}-store-${index}`} className="bg-white rounded-2xl border border-gray-200 p-4 mb-3">
+                  <View className="flex-row items-start">
+                    {storeLogo ? (
+                      <Image source={{ uri: storeLogo }} className="w-16 h-16 rounded-xl mr-3" />
+                    ) : (
+                      <View className="w-16 h-16 rounded-xl bg-amber-100 items-center justify-center mr-3">
+                        <Ionicons name="storefront" size={24} color="#D97706" />
+                      </View>
+                    )}
+                    <View className="flex-1">
+                      <Text className="text-base font-semibold text-gray-900">{storeName}</Text>
+                      <Text className="text-sm text-gray-600 mt-1">Owner: {ownerName}</Text>
+                    </View>
+                  </View>
+
+                  <View className="mt-3 space-y-1">
+                    <Text className="text-sm text-gray-700">📞 {phoneNumber}</Text>
+                    <Text className="text-sm text-gray-700">📍 {address}</Text>
+                    <Text className="text-sm text-gray-700">🕒 {openingTime} - {closingTime}</Text>
+                    <Text className="text-sm text-gray-700">🧭 Distance: {distance}</Text>
+                  </View>
+
+                  <View className="flex-row mt-4">
+                    <TouchableOpacity
+                      className="flex-1 bg-green-600 rounded-xl py-2.5 mr-2"
+                      onPress={() => openGoogleMaps(latitude, longitude)}
+                    >
+                      <Text className="text-white text-center font-semibold">📍 View Location</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="flex-1 bg-gray-900 rounded-xl py-2.5 ml-2"
+                      onPress={() => openPhoneDialer(phoneNumber)}
+                    >
+                      <Text className="text-white text-center font-semibold">📞 Call</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text className={item.type === "user" ? "text-white" : "text-gray-900"}>{item.text}</Text>
+        )}
+      </View>
+    );
+  }, [openGoogleMaps, openPhoneDialer]);
 
   return (
     <View className="flex-1 bg-white">
