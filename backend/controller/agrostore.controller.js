@@ -318,3 +318,10 @@ exports.findNearestStoreWithProduct = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+
+
+
+//  this is for the get the all agrostore for the map 
+

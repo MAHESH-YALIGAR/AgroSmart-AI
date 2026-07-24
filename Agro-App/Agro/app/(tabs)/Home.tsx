@@ -128,7 +128,7 @@ const Home = () => {
                   px-3
                 "
                 >
-                  Check today's market prices
+                  Check today&apos;s market prices
                 </Text>
 
               </TouchableOpacity>
@@ -180,7 +180,7 @@ const Home = () => {
             </TouchableOpacity>
 
             {/* AI Advisor */}
-           
+
 
             <TouchableOpacity
               className="
@@ -194,36 +194,36 @@ const Home = () => {
               shadow-sm
             "
             >
-                <MaterialCommunityIcons
-                  name="robot"
-                  size={50}
-                  color="#16a34a"
-                />
+              <MaterialCommunityIcons
+                name="robot"
+                size={50}
+                color="#16a34a"
+              />
 
-                <Text
-                  className="
+              <Text
+                className="
                 text-lg
                 font-bold
                 mt-3
                 text-gray-800
               "
-                >
-                  AI Advisor
-                </Text>
+              >
+                AI Advisor
+              </Text>
 
-                <Text
-                  className="
+              <Text
+                className="
                 text-xs
                 text-gray-500
                 text-center
                 mt-1
                 px-3
               "
-                >
-                  Smart farming assistant
-                </Text>
+              >
+                Smart farming assistant
+              </Text>
             </TouchableOpacity>
-             
+
 
             {/* Government Schemes */}
 
@@ -273,12 +273,12 @@ const Home = () => {
             {/* Yield Prediction */}
 
             {/* <MaterialCommunityIcons name="sprout" size={50} color="#16a34a" /> */}
-             <Link
-            href="/components/FindExpert"
-            asChild
-          >
-            <TouchableOpacity
-              className="
+            <Link
+              href="/components/FindExpert"
+              asChild
+            >
+              <TouchableOpacity
+                className="
               bg-white
               w-40
               h-40
@@ -288,38 +288,50 @@ const Home = () => {
               justify-center
               shadow-sm
             "
-            >
-              <MaterialCommunityIcons name="account-outline" size={50} color="#16a34a" />
-              <Text
-                className="
+              >
+                <MaterialCommunityIcons name="account-outline" size={50} color="#16a34a" />
+                <Text
+                  className="
                 text-lg
                 font-bold
                 mt-3
                 text-gray-800
               "
-              >
-                Crop Advisor
-              </Text>
+                >
+                  Crop Advisor
+                </Text>
 
-              <Text
-                className="
+                <Text
+                  className="
                 text-xs
                 text-gray-500
                 text-center
                 mt-1
                 px-3
               "
-              >
-                Predict crop yield
-              </Text>
+                >
+                  Predict crop yield
+                </Text>
 
-            </TouchableOpacity>
-</Link>
+              </TouchableOpacity>
+            </Link>
           </ScrollView>
 
         </View>
 
       </ScrollView>
+      <View className="items-center mt-4">
+        <TouchableOpacity
+          activeOpacity={0.8}
+          className="w-16 h-16 rounded-full bg-green-600 items-center justify-center shadow-lg shadow-green-200"
+        >
+          <MaterialCommunityIcons
+            name="map-marker-radius"
+            size={28}
+            color="#ffffff"
+          />
+        </TouchableOpacity>
+      </View>
 
     </View>
   );
