@@ -31,7 +31,7 @@ const Home = () => {
   const { user } =
     useContext(UserContext);
 
-    // console.log("this is  from the user data in home.tsx ",user._id)
+  // console.log("this is  from the user data in home.tsx ",user._id)
 
   return (
     <View className="flex-1 bg-gray-100">
@@ -180,6 +180,7 @@ const Home = () => {
             </TouchableOpacity>
 
             {/* AI Advisor */}
+           
 
             <TouchableOpacity
               className="
@@ -193,36 +194,36 @@ const Home = () => {
               shadow-sm
             "
             >
-              <MaterialCommunityIcons
-                name="robot"
-                size={50}
-                color="#16a34a"
-              />
+                <MaterialCommunityIcons
+                  name="robot"
+                  size={50}
+                  color="#16a34a"
+                />
 
-              <Text
-                className="
+                <Text
+                  className="
                 text-lg
                 font-bold
                 mt-3
                 text-gray-800
               "
-              >
-                AI Advisor
-              </Text>
+                >
+                  AI Advisor
+                </Text>
 
-              <Text
-                className="
+                <Text
+                  className="
                 text-xs
                 text-gray-500
                 text-center
                 mt-1
                 px-3
               "
-              >
-                Smart farming assistant
-              </Text>
-
+                >
+                  Smart farming assistant
+                </Text>
             </TouchableOpacity>
+             
 
             {/* Government Schemes */}
 
@@ -271,6 +272,11 @@ const Home = () => {
 
             {/* Yield Prediction */}
 
+            {/* <MaterialCommunityIcons name="sprout" size={50} color="#16a34a" /> */}
+             <Link
+            href="/components/FindExpert"
+            asChild
+          >
             <TouchableOpacity
               className="
               bg-white
@@ -283,12 +289,7 @@ const Home = () => {
               shadow-sm
             "
             >
-              <MaterialCommunityIcons
-                name="chart-line"
-                size={50}
-                color="#16a34a"
-              />
-
+              <MaterialCommunityIcons name="account-outline" size={50} color="#16a34a" />
               <Text
                 className="
                 text-lg
@@ -297,7 +298,7 @@ const Home = () => {
                 text-gray-800
               "
               >
-                Yield
+                Crop Advisor
               </Text>
 
               <Text
@@ -313,7 +314,7 @@ const Home = () => {
               </Text>
 
             </TouchableOpacity>
-
+</Link>
           </ScrollView>
 
         </View>

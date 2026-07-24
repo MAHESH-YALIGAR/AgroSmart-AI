@@ -6,6 +6,8 @@ from langchain.tools import tool
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import ToolNode
 from mongo_client import Mongo_client
+from typing_extensions import Annotated
+from langchain_core.tools.base import InjectedToolArg
 
 db = Mongo_client["Agro-Smart-Ai"]  # Database name
 
@@ -173,81 +175,130 @@ import json
 from langchain_core.runnables import RunnableConfig
 
 
+from pprint import pprint
+import json
+
+@tool
 def get_agriculture_experts(
     config: RunnableConfig,
-    crop: str = "",  # Added default to prevent missing parameter errors
-    latitude: float = 0.0,  # Fixes the 400 error by ensuring it accepts a number default
-    longitude: float = 0.0,  # Fixes the 400 error by ensuring it accepts a number default
-    max_distance_km: float = 30,
-) -> str:  # Indicating it now returns a JSON string
+    crop: str = "",
+    max_distance_km: float = 200000,
+) -> str:
     """
-    Returns nearby agriculture experts for a crop.
-
-    Args:
-        crop: Crop name (Tomato, Paddy, Sugarcane...)
-        latitude: User latitude
-        longitude: User longitude
-        max_distance_km: Search radius in KM
-
-    Returns:
-        JSON string containing a list of nearby agriculture experts.
+    Find nearby Government-registered agriculture experts.
     """
-    # Extract location from frontend configuration context
+
     configurable = config.get("configurable", {})
-    lat = configurable.get("latitude", latitude)
-    lon = configurable.get("longitude", longitude)
 
-    print("Expert search Latitude:", lat)
-    print("Expert search Longitude:", lon)
+    lat = configurable.get("latitude")
+    lon = configurable.get("longitude")
 
-    # Build basic query
+    if lat is None or lon is None:
+        return json.dumps(
+            {
+                "success": False,
+                "message": "User location is unavailable."
+            },
+            indent=2,
+        )
+
     query = {"isActive": True}
 
-    # Only filter by crop if a valid string is provided
     if crop and crop.strip() and crop.lower() != "unknown":
-        query["crop"] = {"$regex": crop.strip(), "$options": "i"}
+        query["crop"] = {
+            "$regex": crop.strip(),
+            "$options": "i"
+        }
 
-    # Execute MongoDB geo-aggregation pipeline
-    experts = list(
-        expert_collection.aggregate(
-            [
-                {
-                    "$geoNear": {
-                        "near": {
-                            "type": "Point",
-                            "coordinates": [float(lon), float(lat)],
-                        },
-                        "distanceField": "distance",
-                        "maxDistance": max_distance_km * 1000,
-                        "spherical": True,
-                        "query": query,
-                    }
+    # ---------------------- DEBUG ----------------------
+
+    # print("\n" + "=" * 60)
+    # print("Agriculture Expert Tool")
+    # print("=" * 60)
+    # print(f"Latitude           : {lat}")
+    # print(f"Longitude          : {lon}")
+    # print(f"Crop               : {crop}")
+    # print(f"Max Distance (km)  : {max_distance_km}")
+    # print(f"Mongo Query        : {query}")
+
+    pipeline = [
+        {
+            "$geoNear": {
+                "near": {
+                    "type": "Point",
+                    "coordinates": [
+                        float(lon),
+                        float(lat),
+                    ],
                 },
-                {
-                    "$project": {
-                        "_id": 0,
-                        "name": 1,
-                        "phone": 1,
-                        "email": 1,
-                        "crop": 1,
-                        "location": {"coordinates": [75.1383, 14.8804]},
-                        "experience": 1,
-                        "description": 1,
-                        "state": 1,
-                        "district": 1,
-                        "taluka": 1,
-                        "place": 1,
-                        "distance": {"$round": [{"$divide": ["$distance", 1000]}, 2]},
-                    }
-                },
-            ]
+                "distanceField": "distance",
+                "maxDistance": max_distance_km * 1000,
+                "spherical": True,
+                "query": query,
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "name": 1,
+                "phone": 1,
+                "email": 1,
+                "crop": 1,
+                "experience": 1,
+                "description": 1,
+                "state": 1,
+                "district": 1,
+                "taluka": 1,
+                "place": 1,
+                "location": 1,
+                "distance": {
+                    "$round": [
+                        {"$divide": ["$distance", 1000]},
+                        2
+                    ]
+                }
+            }
+        },
+        {
+            "$sort": {
+                "distance": 1
+            }
+        }
+    ]
+
+    print("\nMongoDB Aggregate Pipeline:")
+    pprint(pipeline)
+
+    # ---------------------- EXECUTE ----------------------
+
+    try:
+        experts = list(expert_collection.aggregate(pipeline))
+
+        print(f"\nExperts Found: {len(experts)}")
+
+        if experts:
+            print("First Expert:")
+            pprint(experts[0])
+
+        return json.dumps(
+            experts,
+            indent=2,
+            ensure_ascii=False
         )
-    )
 
-    # Convert the Python list of dictionaries into a valid JSON string output
-    return json.dumps(experts, indent=2, ensure_ascii=False)
+    except Exception as e:
+        import traceback
 
+        print("\nMongoDB ERROR")
+        traceback.print_exc()
 
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e)
+            },
+            indent=2,
+        )
 # //this is for the get the agro store information
 
 
@@ -318,7 +369,7 @@ def get_agro_store(
                         "_id": 0,
                         "storeName": 1,
                         "ownerName": 1,
-                        "location": {"coordinates": [75.1383, 14.8804]},
+                        "location": {"coordinates": [lat,lon]},
                         "mobile": 1,
                         "address": 1,
                         "openingTime": 1,

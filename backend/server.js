@@ -13,10 +13,12 @@ app.use(express.json()); // Parses incoming JSON request bodies
 const authrouter = require("./router/user.routes");
 const alertrouter = require("./router/services.routes");
 const webrouter = require("./router/web.routes")
+const additionalsrouter=require("./router/additional.routes")
 // Route Middleware
 app.use("/api/v1/auth", authrouter);
 app.use("/api/v1/weather", alertrouter);
-app.use("/api/v1/webrouter", webrouter)
+app.use("/api/v1/webrouter", webrouter);
+app.use("/api/v1/addtional",additionalsrouter)
 
 // Mongoose Connection
 mongoose.connect(process.env.MONGO_URI)

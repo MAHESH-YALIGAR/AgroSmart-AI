@@ -71,7 +71,7 @@ async def chat_endpoint(request: ChatRequest):
                 "longitude": request.longitude,
             }
         }
-
+        print("config data is the ",config)
         # Invoke the graph state processing sequence
         output = compiled_graph.invoke(inputs, config=config)
 
