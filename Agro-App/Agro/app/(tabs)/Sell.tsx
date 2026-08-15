@@ -1,12 +1,9 @@
-import { View, Text } from 'react-native'
-import React from 'react'
+import React from "react";
+
+import SellCrop from "../components/SellCrop";
 
 const Sell = () => {
-  return (
-    <View>
-      <Text>Sell</Text>
-    </View>
-  )
-}
+  return <SellCrop />;
+};
 
-export default Sell
+export default Sell;

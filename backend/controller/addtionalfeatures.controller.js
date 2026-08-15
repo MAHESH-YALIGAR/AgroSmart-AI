@@ -1,5 +1,6 @@
 
 const Expert = require("../models/expert.model");
+const Stores = require("../models/agrostore.model");
 
 module.exports.getexpert = async (req, res) => {
   try {
@@ -24,3 +25,32 @@ module.exports.getexpert = async (req, res) => {
     });
   }
 };
+
+
+
+module.exports.getstores = async (req, res) => {
+  try {
+    const { state, district, taluka, place } = req.body;
+
+    const query = {
+      isActive: true,
+    };
+
+    if (state) query.state = state;
+    if (district) query.district = district;
+    if (taluka) query.taluka = taluka;
+    if (place) query.place = place;
+
+    const stores = await Stores.find(query);
+    console.log(stores)
+    return res.status(200).json(stores);
+
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+
+

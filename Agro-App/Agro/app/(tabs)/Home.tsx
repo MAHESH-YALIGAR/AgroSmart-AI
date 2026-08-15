@@ -135,9 +135,10 @@ const Home = () => {
             </Link>
 
             {/* Disease Detection */}
-
-            <TouchableOpacity
-              className="
+            <Link href="/(tabs)/Sell"
+              asChild>
+              <TouchableOpacity
+                className="
               bg-white
               w-40
               h-40
@@ -147,88 +148,88 @@ const Home = () => {
               justify-center
               shadow-sm
             "
-            >
-              <MaterialCommunityIcons
-                name="leaf"
-                size={50}
-                color="#16a34a"
-              />
+              >
+                <MaterialCommunityIcons
+                  name="leaf"
+                  size={50}
+                  color="#16a34a"
+                />
 
-              <Text
-                className="
+                <Text
+                  className="
                 text-lg
                 font-bold
                 mt-3
                 text-gray-800
               "
-              >
-                Disease Scan
-              </Text>
+                >
+                  Sale Crop
+                </Text>
 
-              <Text
-                className="
+                <Text
+                  className="
                 text-xs
                 text-gray-500
                 text-center
                 mt-1
                 px-3
               "
-              >
-                Detect crop diseases
-              </Text>
+                >
+                  Sell crops directly to factories and bulk buyers.
+                </Text>
 
-            </TouchableOpacity>
-
+              </TouchableOpacity>
+            </Link>
             {/* AI Advisor */}
-
-
-            <TouchableOpacity
-              className="
-              bg-white
-              w-40
-              h-40
-              rounded-3xl
-              mr-4
-              items-center
-              justify-center
-              shadow-sm
-            "
-            >
-              <MaterialCommunityIcons
-                name="robot"
-                size={50}
-                color="#16a34a"
-              />
-
-              <Text
+            <Link href="/components/FindStores" asChild>
+              <TouchableOpacity
                 className="
-                text-lg
-                font-bold
-                mt-3
-                text-gray-800
-              "
+      bg-white
+      w-40
+      h-40
+      rounded-3xl
+      mr-4
+      items-center
+      justify-center
+      shadow-sm
+    "
               >
-                AI Advisor
-              </Text>
+                <MaterialCommunityIcons
+                  name="robot"
+                  size={50}
+                  color="#16a34a"
+                />
 
-              <Text
-                className="
-                text-xs
-                text-gray-500
-                text-center
-                mt-1
-                px-3
-              "
-              >
-                Smart farming assistant
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  className="
+        text-lg
+        font-bold
+        mt-3
+        text-gray-800
+      "
+                >
+                  Find Agro Stores
+                </Text>
 
+                <Text
+                  className="
+        text-xs
+        text-gray-500
+        text-center
+        mt-1
+        px-3
+      "
+                >
+                  Find nearby agro product stores
+                </Text>
+              </TouchableOpacity>
+            </Link>
 
             {/* Government Schemes */}
+            <Link href="/components/Applyexpert" asChild>
 
-            <TouchableOpacity
-              className="
+              <TouchableOpacity
+                className="
               bg-white
               w-40
               h-40
@@ -238,38 +239,38 @@ const Home = () => {
               justify-center
               shadow-sm
             "
-            >
-              <MaterialCommunityIcons
-                name="bank"
-                size={50}
-                color="#16a34a"
-              />
+              >
+                <MaterialCommunityIcons
+                  name="bank"
+                  size={50}
+                  color="#16a34a"
+                />
 
-              <Text
-                className="
+                <Text
+                  className="
                 text-lg
                 font-bold
                 mt-3
                 text-gray-800
               "
-              >
-                Schemes
-              </Text>
+                >
+                  Apply expert
+                </Text>
 
-              <Text
-                className="
+                <Text
+                  className="
                 text-xs
                 text-gray-500
                 text-center
                 mt-1
                 px-3
               "
-              >
-                Government support
-              </Text>
+                >
+                  apply with legal document
+                </Text>
 
-            </TouchableOpacity>
-
+              </TouchableOpacity>
+            </Link>
             {/* Yield Prediction */}
 
             {/* <MaterialCommunityIcons name="sprout" size={50} color="#16a34a" /> */}
@@ -320,10 +321,10 @@ const Home = () => {
         </View>
 
       </ScrollView>
-     
-        <View className="items-center mt-4">
-           <Link href="/components/MapScreen"
-        asChild>
+
+      <View className="items-center mt-4">
+        <Link href="/components/MapScreen"
+          asChild>
           <TouchableOpacity
             activeOpacity={0.8}
             className="w-16 h-16 rounded-full bg-green-600 items-center justify-center shadow-lg shadow-green-200"
@@ -334,9 +335,9 @@ const Home = () => {
               color="#ffffff"
             />
           </TouchableOpacity>
-          </Link>
-        </View>
-     
+        </Link>
+      </View>
+
     </View>
   );
 };
