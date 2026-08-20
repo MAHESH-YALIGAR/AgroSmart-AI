@@ -1,6 +1,6 @@
 const AgroStore = require("../models/agrostore.model");
 const { resolveLocationFromPlace } = require("../services/geocode");
-
+const AgricultureScheme = require("../models/expert.model")
 /**
  * @desc   Create a new agro store
  * @route  POST /api/agro-stores
@@ -88,6 +88,85 @@ exports.getAllAgroStores = async (req, res) => {
   }
 };
 
+
+
+exports.createAgricultureScheme = async (req, res) => {
+  try {
+    const {
+      schemeName,
+      schemeType,
+      shortDescription,
+      benefits,
+      eligibilitySummary,
+      targetLocation,
+      targetCrop,
+      applicationStartDate,
+      applicationLastDate,
+      officialApplicationLink,
+    } = req.body;
+
+    // Basic validation
+    if (
+      !schemeName ||
+      !schemeType ||
+      !shortDescription ||
+      !benefits ||
+      !eligibilitySummary ||
+      !targetLocation?.level ||
+      !applicationStartDate ||
+      !applicationLastDate ||
+      !officialApplicationLink
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields",
+      });
+    }
+
+    // Check date
+    if (
+      new Date(applicationLastDate) <
+      new Date(applicationStartDate)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Application last date cannot be before application start date",
+      });
+    }
+
+    // Create scheme
+    const scheme = await AgricultureScheme.create({
+      schemeName,
+      schemeType,
+      shortDescription,
+      benefits,
+      eligibilitySummary,
+      targetLocation,
+      targetCrop:
+        targetCrop && targetCrop.length > 0
+          ? targetCrop
+          : ["All Crops"],
+      applicationStartDate,
+      applicationLastDate,
+      officialApplicationLink,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Agriculture scheme created successfully",
+      data: scheme,
+    });
+  } catch (error) {
+    console.error("Create Scheme Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create agriculture scheme",
+      error: error.message,
+    });
+  }
+};
 /**
  * @desc   Get a single agro store by ID
  * @route  GET /api/agro-stores/:id

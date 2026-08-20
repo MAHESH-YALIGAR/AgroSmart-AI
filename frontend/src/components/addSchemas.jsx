@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import axios from "axios";
 import {
   AlertCircle,
   BadgeCheck,
@@ -51,6 +52,7 @@ const initialForm = {
 
 const inputBase =
   "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-green-700 focus:outline-none focus:ring-2 focus:ring-green-200 transition-all";
+const BACKEND_API = import.meta.env.VITE_BACKEND_API;
 
 function FieldLabel({ label, required = false }) {
   return (
@@ -203,7 +205,23 @@ export default function AddSchemasPage() {
 
     setIsSubmitting(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await axios.post(`${BACKEND_API}/api/v1/webrouter/addSchemas`, {
+        schemeName: form.schemeName,
+        schemeType: form.schemeType,
+        shortDescription: form.shortDescription,
+        benefits: form.benefits,
+        eligibilitySummary: form.eligibilitySummary,
+        targetLocation: {
+          level: form.targetLocation,
+          state: form.state,
+          district: form.district,
+          taluka: form.taluka,
+        },
+        targetCrop: form.targetCrop ? [form.targetCrop] : ["All Crops"],
+        applicationStartDate: form.applicationStartDate,
+        applicationLastDate: form.applicationLastDate,
+        officialApplicationLink: buildUrlSafe(form.officialApplicationLink),
+      });
       const nextStatus = action === "publish" ? "Published" : "Draft";
       setForm((prev) => ({ ...prev, status: nextStatus }));
       setMessage({
