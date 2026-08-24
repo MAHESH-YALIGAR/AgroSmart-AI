@@ -2,6 +2,7 @@ import React from "react";
 import AgricultureExperts from "./components/add_experts";
 import ProductSearchSelect from "./components/add_agrostores";
 import AddSchemasPage from "./components/addSchemas";
+import ExpertManagement from "./components/expert_crud";
 
 import {
   BrowserRouter,
@@ -26,6 +27,10 @@ function App() {
   <Route
           path="/addschema"
           element={<AddSchemasPage />}
+        />
+       <Route
+          path="/ExpertManegement"
+          element={<ExpertManagement />}
         />
       </Routes>
     </BrowserRouter>

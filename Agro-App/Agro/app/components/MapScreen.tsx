@@ -19,7 +19,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useNavigation } from "@react-navigation/native";
 
 const { width } = Dimensions.get("window");
-const BACKEND = process.env.EXPO_PUBLIC_BACKEND_API || "https://ngrok-free.dev";
+const BACKEND = process.env.EXPO_PUBLIC_BACKEND_API ;
 
 interface Store {
   _id: string;

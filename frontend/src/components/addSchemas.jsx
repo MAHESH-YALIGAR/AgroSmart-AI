@@ -205,7 +205,7 @@ export default function AddSchemasPage() {
 
     setIsSubmitting(true);
     try {
-      await axios.post(`${BACKEND_API}/api/v1/webrouter/addSchemas`, {
+      await axios.post(`${BACKEND_API}/api/v1/addtional/AgricultureScheme`, {
         schemeName: form.schemeName,
         schemeType: form.schemeType,
         shortDescription: form.shortDescription,

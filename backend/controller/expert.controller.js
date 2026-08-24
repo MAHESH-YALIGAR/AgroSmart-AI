@@ -22,14 +22,55 @@ exports.createExpert = async (req, res) => {
       description,
     } = req.body;
 
-    // Backend resolves lat/lng from the selected Place — never sent by the client.
-    const location = await resolveLocationFromPlace(state,district,taluka,place);
+    // ==========================================
+    // 1. Validate email
+    // ==========================================
+
+    if (!email || email.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    // Normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // ==========================================
+    // 2. CHECK WHETHER EMAIL ALREADY EXISTS
+    // ==========================================
+
+    const existingExpert = await Expert.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingExpert) {
+      return res.status(409).json({
+        success: false,
+        message: "An expert with this email already exists",
+      });
+    }
+
+    // ==========================================
+    // 3. Resolve location
+    // ==========================================
+
+    const location = await resolveLocationFromPlace(
+      state,
+      district,
+      taluka,
+      place
+    );
+
+    // ==========================================
+    // 4. Create expert
+    // ==========================================
 
     const expert = await Expert.create({
       photo,
       name,
       phone,
-      email,
+      email: normalizedEmail,
       crop,
       state,
       district,
@@ -38,15 +79,38 @@ exports.createExpert = async (req, res) => {
       location,
       experience,
       description,
-      createdBy: req.user?._id, // set by auth middleware
+      createdBy: req.user?._id,
     });
 
-    res.status(201).json({ success: true, data: expert });
+    // ==========================================
+    // 5. Response
+    // ==========================================
+
+    return res.status(201).json({
+      success: true,
+      message: "Expert created successfully",
+      data: expert,
+    });
+
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+
+    // ==========================================
+    // 6. MongoDB duplicate key protection
+    // ==========================================
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "An expert with this email already exists",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
-
 /**
  * @desc   Get all experts (with optional filters: crop, state, district, taluka, place)
  * @route  GET /api/experts
