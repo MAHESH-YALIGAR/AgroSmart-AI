@@ -16,7 +16,9 @@ import {
   Pressable,
   Image,
   Linking,
+  Alert,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 const BACKEND_API = process.env.EXPO_PUBLIC_PYTHON_BACKEND_API || "http://192.168.244.122:8000";
 console.log("PYTHON BACKEND API:", BACKEND_API);
@@ -133,6 +135,7 @@ type MessageItem = {
   text: string;
   kind?: "text" | "experts" | "stores";
   data?: any[];
+  imageUri?: string;
 };
 
 const ChatScreen = () => {
@@ -141,12 +144,20 @@ const ChatScreen = () => {
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userid, setUserid] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState("English");
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
 
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   const { user } = useContext(UserContext);
 
+  const languages = ["Kannada", "English", "Hindi", "Tamil", "Marathi"];
 
+  const handleLanguageSelect = (language: string) => {
+    setSelectedLanguage(language);
+    setLanguageModalVisible(false);
+  };
   useEffect(() => {
     if (user?._id) {
       setUserid(user._id);
@@ -187,7 +198,7 @@ const ChatScreen = () => {
   const pushMessage = (
     text: string,
     type: "user" | "assistant",
-    options?: { kind?: MessageItem["kind"]; data?: any[] }
+    options?: { kind?: MessageItem["kind"]; data?: any[]; imageUri?: string }
   ) => {
     const newMessage = {
       id: `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -195,69 +206,152 @@ const ChatScreen = () => {
       text,
       kind: options?.kind ?? "text",
       data: options?.data,
+      imageUri: options?.imageUri,
     };
     setMessages((prev) => [...prev, newMessage]);
   };
 
-  const handleSend = async () => {
-    console.log("Send button clicked");
+  const handlePickImage = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    const trimmed = message.trim();
-
-    if (!trimmed) return;
-
-    console.log("BACKEND_API =", BACKEND_API);
-    console.log("userid =", userid);
-    console.log("message =", trimmed);
-
-    pushMessage(trimmed, "user");
-    setMessage("");
-
-    const latitude = await AsyncStorage.getItem("latitude");
-    const longitude = await AsyncStorage.getItem("longitude");
-
-    console.log("Latitude:", latitude);
-    console.log("Longitude:", longitude);
-    try {
-      const payload = {
-        userId: userid || "guest",
-        prompt: trimmed,
-        latitude: Number(latitude ?? 0),
-        longitude: Number(longitude ?? 0),
-      };
-      console.log("payload", payload);
-
-      console.log("Sending payload:", payload);
-
-      const response = await axios.post(`${BACKEND_API}/chat`, payload, {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log("AI Response:", response.data);
-
-      const responsePayload = response?.data;
-      const structuredReply = resolveStructuredReply(responsePayload);
-
-      pushMessage(structuredReply.text, "assistant", {
-        kind: structuredReply.kind,
-        data: structuredReply.data,
-      });
-    } catch (error: any) {
-      console.log("FULL ERROR");
-      console.log(error?.message);
-      console.log(error?.response?.status);
-      console.log(error?.response?.data);
-
-      const errorText =
-        error?.response?.data?.detail ||
-        error?.response?.data?.message ||
-        "Sorry, I couldn't reach the assistant right now.";
-
-      pushMessage(errorText, "assistant");
+    if (status !== "granted") {
+      Alert.alert("Photo access needed", "Please allow access to your photos to attach an image.");
+      return;
     }
-  };
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  }, []);
+
+  const handleTakePhoto = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (status !== "granted") {
+      Alert.alert("Camera access needed", "Please allow camera access to take a photo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  }, []);
+
+ const handleSend = async () => {
+  console.log("Send button clicked");
+
+  const trimmed = message.trim();
+  const hasAttachment = Boolean(selectedImage);
+
+  // If there's no text and no image, do nothing
+  if (!trimmed && !hasAttachment) return;
+
+  // Fallback text if user only sends a photo without a message prompt
+  const promptText = trimmed || "explane about this disease impact and  reson and  solution .";
+
+  console.log("BACKEND_API =", BACKEND_API);
+  console.log("userid =", userid);
+  console.log("message =", promptText);
+
+  // 1. Instantly display user's message/photo in the chat interface
+  pushMessage(promptText, "user", { imageUri: selectedImage ?? undefined });
+  
+  // Store a reference to the image before clearing state
+  const imageToUpload = selectedImage;
+
+  // Clear input fields immediately for an optimal user experience
+  setMessage("");
+  setSelectedImage(null);
+
+  // 2. Fetch current user location coordinates
+  const latitude = await AsyncStorage.getItem("latitude");
+  const longitude = await AsyncStorage.getItem("longitude");
+
+  console.log("Latitude:", latitude);
+  console.log("Longitude:", longitude);
+
+  try {
+    // 3. Construct a structural data object matching your backend ChatRequest schema
+    const chatMetadata = {
+      userId: userid || "guest",
+      prompt: promptText, // Use promptText to ensure something is always sent
+      language: selectedLanguage || "English",
+      latitude: Number(latitude ?? 0),
+      longitude: Number(longitude ?? 0),
+    };
+
+    // 4. Initialize FormData payload (required for multi-part binary streaming)
+    const formData = new FormData();
+    
+    // Add structural fields under the "payload" key as a serialized string
+    formData.append("payload", JSON.stringify(chatMetadata));
+
+    // 5. Append the native file parameters if an image was picked
+    if (imageToUpload) {
+      const filename = imageToUpload.split("/").pop() || "upload.jpg";
+      const match = /\.(\w+)$/.exec(filename);
+      const fileType = match ? `image/${match[1]}` : "image/jpeg";
+
+      // @ts-ignore (Suppresses React Native FormData type differences)
+      formData.append("photo", {
+        uri: imageToUpload,
+        name: filename,
+        type: fileType,
+      });
+    }
+
+    console.log("Sending Form Data payload metadata:", chatMetadata);
+
+    // 6. Post multipart/form-data request using Axios
+    const response = await axios.post(`${BACKEND_API}/chat`, formData, {
+      headers: {
+        // Do NOT manually define boundary here; Axios appends native ones securely
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    console.log("AI Response:", response.data);
+
+    const responsePayload = response?.data;
+    const structuredReply = resolveStructuredReply(responsePayload);
+
+    pushMessage(structuredReply.text, "assistant", {
+      kind: structuredReply.kind,
+      data: structuredReply.data,
+    });
+
+  } catch (error: any) {
+    console.log("FULL ERROR");
+    console.log(error?.message);
+    console.log(error?.response?.status);
+    console.log("Error Payload Data:", JSON.stringify(error?.response?.data));
+
+    // CRASH FIX: Guard against structured objects by extracting or stringifying details safely
+    let errorText = "Sorry, I couldn't reach the assistant right now.";
+    
+    if (error?.response?.data?.detail) {
+      const detail = error.response.data.detail;
+      // If the backend returns an error list/object, convert it to a string so it won't crash React
+      errorText = typeof detail === "object" ? JSON.stringify(detail) : String(detail);
+    } else if (error?.response?.data?.message) {
+      errorText = String(error.response.data.message);
+    }
+
+    pushMessage(errorText, "assistant");
+  }
+};
+
   const renderChatItem = useCallback(({ item }: { item: any }) => (
     <TouchableOpacity
       className="bg-green-50 rounded-2xl p-4 mb-3"
@@ -327,6 +421,10 @@ const ChatScreen = () => {
             : "self-start bg-gray-100 p-4 rounded-3xl mb-3 max-w-[80%]"
         }
       >
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} className="w-56 h-56 rounded-2xl mb-3" resizeMode="cover" />
+        ) : null}
+
         {isAssistantStructured ? (
           <View className="w-full">
             <Text className="text-gray-900 font-semibold mb-3">{item.text}</Text>
@@ -506,15 +604,29 @@ const ChatScreen = () => {
             />
           </View>
 
+          {selectedImage ? (
+            <View className="mb-3 rounded-2xl border border-green-200 bg-green-50 p-2">
+              <View className="relative">
+                <Image source={{ uri: selectedImage }} className="w-full h-40 rounded-xl" resizeMode="cover" />
+                <TouchableOpacity
+                  className="absolute top-2 right-2 bg-black/60 rounded-full w-8 h-8 items-center justify-center"
+                  onPress={() => setSelectedImage(null)}
+                >
+                  <Ionicons name="close" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center">
-              <TouchableOpacity className="mr-4">
+              <TouchableOpacity className="mr-4" onPress={handlePickImage} activeOpacity={0.8}>
                 <Ionicons name="images" size={26} color="#16A34A" />
               </TouchableOpacity>
-              <TouchableOpacity className="mr-4">
+              <TouchableOpacity className="mr-4" onPress={handleTakePhoto} activeOpacity={0.8}>
                 <Ionicons name="camera" size={26} color="#16A34A" />
               </TouchableOpacity>
-              <TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.8} onPress={() => setLanguageModalVisible(true)}>
                 <MaterialIcons name="translate" size={26} color="#16A34A" />
               </TouchableOpacity>
             </View>
@@ -525,12 +637,12 @@ const ChatScreen = () => {
               </TouchableOpacity>
               <TouchableOpacity
                 className={
-                  message.trim()
+                  message.trim() || selectedImage
                     ? "bg-green-600 px-5 py-3 rounded-2xl"
                     : "bg-green-300 px-5 py-3 rounded-2xl"
                 }
                 onPress={handleSend}
-                disabled={!message.trim()}
+                disabled={!message.trim() && !selectedImage}
               >
                 <Text className="text-white font-semibold">Send</Text>
               </TouchableOpacity>
@@ -538,6 +650,37 @@ const ChatScreen = () => {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={languageModalVisible}
+        onRequestClose={() => setLanguageModalVisible(false)}
+      >
+        <Pressable className="flex-1 bg-black/35 items-center justify-center px-5" onPress={() => setLanguageModalVisible(false)}>
+          <Pressable className="w-full rounded-3xl bg-white p-5" onPress={() => {}}>
+            <Text className="text-lg font-bold text-gray-900 mb-4">Select Language</Text>
+
+            {languages.map((lang) => (
+              <TouchableOpacity
+                key={lang}
+                className={[
+                  "flex-row items-center justify-between rounded-2xl border px-4 py-3 mb-2",
+                  selectedLanguage === lang ? "border-green-600 bg-green-50" : "border-gray-200 bg-white",
+                ].join(" ")}
+                onPress={() => handleLanguageSelect(lang)}
+              >
+                <Text className={selectedLanguage === lang ? "text-green-700 font-semibold" : "text-gray-800"}>
+                  {lang}
+                </Text>
+                {selectedLanguage === lang ? (
+                  <MaterialIcons name="check" size={20} color="#16A34A" />
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Left sidebar - chat history */}
       <Modal
