@@ -54,7 +54,7 @@ const agricultureSchemeSchema = new mongoose.Schema(
         required: true,
         enum: ["All India", "State", "District", "Taluka"],
       },
-
+    
       // Used when level = State/District/Taluka
       state: {
         type: String,
@@ -96,6 +96,10 @@ const agricultureSchemeSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+      isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
 
   {
@@ -104,4 +108,4 @@ const agricultureSchemeSchema = new mongoose.Schema(
 );
 
 
-module.exports=mongoose.model("AgricultureScheme",agricultureSchemeSchema)
+module.exports = mongoose.model("AgricultureScheme", agricultureSchemeSchema)

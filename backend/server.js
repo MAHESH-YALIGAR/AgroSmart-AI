@@ -24,6 +24,11 @@ app.use("/api/v1/addtional",additionalsrouter)
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("Mongoose is connected successfully");
+    return mongoose.connection.collection("experts").dropIndex("email_1").catch((error) => {
+      if (error.codeName !== "IndexNotFound") {
+        console.error("Could not remove the old unique expert email index:", error.message);
+      }
+    });
   })
   .catch((err) => {
     console.error("Mongoose connection failed:", err.message);

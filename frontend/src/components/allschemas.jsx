@@ -38,10 +38,10 @@ function formatDate(value) {
   return Number.isNaN(date.getTime())
     ? "-"
     : date.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 }
 
 function toDateInput(value) {
@@ -94,7 +94,15 @@ export default function AllSchemas() {
     async function loadSchemes() {
       try {
         const response = await axios.get(`${BACKEND_API}/api/v1/addtional/getallSchemas`);
-        setSchemes(normalizeSchemes(response.data));
+        const loadedSchemes = normalizeSchemes(response.data);
+        setSchemes(loadedSchemes);
+        setHeldIds(
+          new Set(
+            loadedSchemes
+              .filter((scheme) => scheme.isActive === false)
+              .map((scheme) => scheme._id)
+          )
+        );
       } catch (requestError) {
         console.error("Failed to load schemes:", requestError);
         setError("Unable to load schemes from the server.");
@@ -123,70 +131,107 @@ export default function AllSchemas() {
     setEditForm((current) => ({ ...current, [field]: value }));
   }
 
-  function saveEdit(event) {
+  async function saveEdit(event) {
     event.preventDefault();
     if (!editingScheme) return;
 
-    setSchemes((current) =>
-      current.map((scheme) =>
-        scheme._id === editingScheme._id
-          ? {
-              ...scheme,
-              ...editForm,
-              targetCrop: editForm.targetCrop
-                .split(",")
-                .map((crop) => crop.trim())
-                .filter(Boolean),
-              targetLocation: {
-                level: editForm.targetLocation,
-                state: editForm.state,
-                district: editForm.district,
-                taluka: editForm.taluka,
-              },
-            }
-          : scheme
-      )
-    );
-    setEditingScheme(null);
+    const payload = {
+      ...editForm,
+      targetCrop: editForm.targetCrop
+        .split(",")
+        .map((crop) => crop.trim())
+        .filter(Boolean),
+      targetLocation: {
+        level: editForm.targetLocation,
+        state: editForm.state,
+        district: editForm.district,
+        taluka: editForm.taluka,
+      },
+    };
+
+    try {
+      const response = await axios.put(
+        `${BACKEND_API}/api/v1/addtional/updateschema/${editingScheme._id}`,
+        payload
+      );
+      const updatedScheme = response.data.data;
+
+      setSchemes((current) =>
+        current.map((scheme) =>
+          scheme._id === updatedScheme._id ? updatedScheme : scheme
+        )
+      );
+      setEditingScheme(null);
+      alert(response.data.message || "Schema updated successfully");
+    } catch (error) {
+      console.error("Error updating scheme:", error);
+      alert(error.response?.data?.message || "Failed to update scheme");
+    }
   }
 
-async function deleteScheme(id) {
-  // 1. Ask for confirmation
-  if (!window.confirm("Are you sure you want to delete this scheme?")) return;
+  async function deleteScheme(id) {
+    // 1. Ask for confirmation
+    if (!window.confirm("Are you sure you want to delete this scheme?")) return;
 
-  try {
-    const endpoint = `${BACKEND_API}/api/v1/addtional/deleteschemas`;
-    
-    // 2. Make a POST request and pass the id directly inside the body object
-    const response = await axios.post(endpoint, { id }, {
-      headers: { "Content-Type": "application/json" }
-    });
-    
-    console.log("Delete scheme response:", response.data);
+    try {
+      const endpoint = `${BACKEND_API}/api/v1/addtional/deleteschemas/${id}`;
 
-    // 3. Update local state variables on success
-    setSchemes((current) => current.filter((scheme) => scheme._id !== id));
-    setHeldIds((current) => {
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
+      const response = await axios.delete(endpoint);
 
-    alert("Scheme deleted successfully!");
+      console.log("Delete scheme response:", response.data);
 
-  } catch (error) {
-    console.error("Error deleting scheme:", error);
-    alert("Failed to delete scheme from the server.");
+      // 3. Update local state variables on success
+      setSchemes((current) => current.filter((scheme) => scheme._id !== id));
+      setHeldIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+
+      alert("Scheme deleted successfully!");
+
+    } catch (error) {
+      console.error("Error deleting scheme:", error);
+      alert("Failed to delete scheme from the server.");
+    }
   }
-}
 
-  function toggleHold(id) {
-    setHeldIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  async function toggleHold(id) {
+    const isCurrentlyHeld = heldIds.has(id);
+    const action = isCurrentlyHeld ? "Unhold" : "Hold";
+    if (!window.confirm(`Are you sure you want to ${action.toLowerCase()} this scheme?`)) return;
+
+    try {
+      const endpoint = `${BACKEND_API}/api/v1/addtional/toggleHoldSchema`;
+
+      // 2. Make a POST request and pass the id directly inside the body object
+      const response = await axios.post(endpoint, { id }, {
+        headers: { "Content-Type": "application/json" }
+      });
+
+      console.log("Toggle scheme hold response:", response.data);
+
+      setSchemes((current) =>
+        current.map((scheme) =>
+          scheme._id === id
+            ? { ...scheme, isActive: response.data.isActive }
+            : scheme
+        )
+      );
+
+      setHeldIds((current) => {
+        const next = new Set(current);
+        if (response.data.isActive === false) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+
+      alert(response.data.message || `Scheme ${action.toLowerCase()}ed successfully!`);
+
+    } catch (error) {
+      console.error("Error Holding scheme:", error);
+      alert(`Failed to ${action.toLowerCase()} scheme on the server.`);
+    }
   }
 
   return (
@@ -225,7 +270,7 @@ async function deleteScheme(id) {
           {visibleSchemes.map((scheme) => {
             const isHeld = heldIds.has(scheme._id);
             return (
-              <article key={scheme._id} className={`overflow-hidden rounded-xl border bg-white shadow-sm ${isHeld ? "border-amber-300 opacity-75" : "border-slate-200"}`}>
+              <article key={scheme._id} className={`overflow-hidden rounded-xl border shadow-sm ${isHeld ? "border-slate-200 bg-slate-50 opacity-70" : "border-slate-200 bg-white"}`}>
                 <div className="border-b border-slate-100 p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex gap-3">
@@ -256,7 +301,7 @@ async function deleteScheme(id) {
 
                 <div className="grid grid-cols-3 gap-2 border-t border-slate-100 p-4">
                   <button type="button" onClick={() => startEditing(scheme)} className="flex items-center justify-center gap-1 rounded-lg bg-blue-50 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"><Pencil className="h-4 w-4" /> Edit</button>
-                  <button type="button" onClick={() => toggleHold(scheme._id)} className="flex items-center justify-center gap-1 rounded-lg bg-amber-50 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100">{isHeld ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}{isHeld ? "Release" : "Hold"}</button>
+                  <button type="button" onClick={() => toggleHold(scheme._id)} className="flex items-center justify-center gap-1 rounded-lg bg-amber-50 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100">{isHeld ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}{isHeld ? "Unhold" : "Hold"}</button>
                   <button type="button" onClick={() => deleteScheme(scheme._id)} className="flex items-center justify-center gap-1 rounded-lg bg-red-50 py-2 text-sm font-medium text-red-700 hover:bg-red-100"><Trash2 className="h-4 w-4" /> Delete</button>
                 </div>
               </article>

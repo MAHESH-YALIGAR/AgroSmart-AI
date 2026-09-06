@@ -3,6 +3,7 @@ import AgricultureExperts from "./components/add_experts";
 import ProductSearchSelect from "./components/add_agrostores";
 import AddSchemasPage from "./components/addSchemas";
 import AllSchemas from "./components/allschemas";
+import AllStores from "./components/allstores";
 import ExpertManagement from "./components/ExpertManagement";
 
 import {
@@ -16,6 +17,7 @@ import { ClipboardList, LayoutDashboard, Sprout, Store, UsersRound } from "lucid
 const navigationItems = [
   { label: "Add Expert", path: "/", icon: UsersRound, end: true },
   { label: "Agro Stores", path: "/addagrostores", icon: Store },
+  { label: "All Stores", path: "/allagrostores", icon: Store },
   { label: "Schemes", path: "/addschema", icon: ClipboardList },
   { label: "All Schemes", path: "/allschemas", icon: ClipboardList },
   { label: "Expert Management", path: "/expert-management", icon: LayoutDashboard },
@@ -70,6 +72,10 @@ function App() {
         <Route
           path="/addagrostores"
           element={<ProductSearchSelect />}
+        />
+        <Route
+          path="/allagrostores"
+          element={<AllStores />}
         />
   <Route
           path="/addschema"

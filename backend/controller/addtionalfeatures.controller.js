@@ -99,6 +99,78 @@ module.exports.getstores = async (req, res) => {
   }
 };
 
+module.exports.getAllAgroStoresForManagement = async (req, res) => {
+  try {
+    const stores = await Stores.find({}).sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, data: stores });
+  } catch (error) {
+    console.error("Get all agro stores error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports.updateAgroStoreForManagement = async (req, res) => {
+  const { id } = req.params;
+  const updates = { ...req.body };
+
+  try {
+    const store = await Stores.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!store) {
+      return res.status(404).json({ success: false, message: "Agro store not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Agro store updated successfully",
+      data: store,
+    });
+  } catch (error) {
+    console.error("Update agro store error:", error);
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+module.exports.deleteAgroStoreForManagement = async (req, res) => {
+  try {
+    const store = await Stores.findByIdAndDelete(req.params.id);
+
+    if (!store) {
+      return res.status(404).json({ success: false, message: "Agro store not found" });
+    }
+
+    return res.status(200).json({ success: true, message: "Agro store deleted successfully" });
+  } catch (error) {
+    console.error("Delete agro store error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports.toggleAgroStore = async (req, res) => {
+  try {
+    const store = await Stores.findById(req.params.id);
+
+    if (!store) {
+      return res.status(404).json({ success: false, message: "Agro store not found" });
+    }
+
+    store.isActive = !store.isActive;
+    await store.save();
+
+    return res.status(200).json({
+      success: true,
+      message: store.isActive ? "Agro store unblocked successfully" : "Agro store blocked successfully",
+      isActive: store.isActive,
+    });
+  } catch (error) {
+    console.error("Toggle agro store error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 exports.createAgricultureScheme = async (req, res) => {
   try {
@@ -248,21 +320,88 @@ module.exports.toggleBlockExpert = async (req, res) => {
   }
 };
 
+module.exports.updateExpert = async (req, res) => {
+  const { id } = req.params;
+  const {
+    photo,
+    name,
+    phone,
+    email,
+    crop,
+    state,
+    district,
+    taluka,
+    place,
+    experience,
+    description,
+  } = req.body;
+
+  if (
+    !name ||
+    !phone ||
+    !email ||
+    !crop ||
+    !state ||
+    !district ||
+    !taluka ||
+    !place ||
+    experience === undefined
+  ) {
+    return res.status(400).json({ message: "Please provide all required expert fields" });
+  }
+
+  try {
+    const currentExpert = await expertModel.findById(id);
+
+    if (!currentExpert) {
+      return res.status(404).json({ message: "Expert not found" });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const expert = await expertModel.findByIdAndUpdate(
+      currentExpert._id,
+      {
+        photo: photo || null,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: normalizedEmail,
+        crop: crop.trim(),
+        state: state.trim(),
+        district: district.trim(),
+        taluka: taluka.trim(),
+        place: place.trim(),
+        experience: Number(experience),
+        description: description?.trim() || "",
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!expert) {
+      return res.status(404).json({ message: "Expert not found" });
+    }
+
+    return res.status(200).json({
+      message: "Expert updated successfully",
+      data: expert,
+    });
+  } catch (error) {
+    console.error("Update expert error:", error);
+    return res.status(400).json({ message: error.message || "Failed to update expert" });
+  }
+};
+
 
 
 ///////////////this is for the delete schemas
 
 module.exports.deleteschemas = async (req, res) => {
-  // Add curly braces around email here to extract the string value!
-  const { id } = req.body; 
-  console.log("expert email for the delete:", id); // Should print: yaligarmahesh47@gmail.com
+  const id = req.params.id || req.body.id;
 
   try {
-    // This will now pass { email: "yaligarmahesh47@gmail.com" } to MongoDB
-    const schemas = await AgricultureScheme.findByIdAndDelete(id);
-    console.log("need to delete schema", schemas);
+    const schema = await AgricultureScheme.findByIdAndDelete(id);
 
-    if (schemas.deletedCount === 0) {
+    if (!schema) {
       return res.status(404).json({ message: "Schema not found in database" });
     }
 
@@ -270,5 +409,108 @@ module.exports.deleteschemas = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Schema still available" });
+  }
+};
+
+module.exports.updateSchema = async (req, res) => {
+  const { id } = req.params;
+  const {
+    schemeName,
+    schemeType,
+    shortDescription,
+    benefits,
+    eligibilitySummary,
+    targetLocation,
+    targetCrop,
+    applicationStartDate,
+    applicationLastDate,
+    officialApplicationLink,
+  } = req.body;
+
+  if (
+    !schemeName ||
+    !schemeType ||
+    !shortDescription ||
+    !benefits ||
+    !eligibilitySummary ||
+    !targetLocation?.level ||
+    !applicationStartDate ||
+    !applicationLastDate ||
+    !officialApplicationLink
+  ) {
+    return res.status(400).json({ message: "Please provide all required fields" });
+  }
+
+  if (new Date(applicationLastDate) < new Date(applicationStartDate)) {
+    return res.status(400).json({
+      message: "Application last date cannot be before application start date",
+    });
+  }
+
+  try {
+    const schema = await AgricultureScheme.findByIdAndUpdate(
+      id,
+      {
+        schemeName,
+        schemeType,
+        shortDescription,
+        benefits,
+        eligibilitySummary,
+        targetLocation,
+        targetCrop: targetCrop?.length ? targetCrop : ["All Crops"],
+        applicationStartDate,
+        applicationLastDate,
+        officialApplicationLink,
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!schema) {
+      return res.status(404).json({ message: "Schema not found in database" });
+    }
+
+    return res.status(200).json({
+      message: "Schema updated successfully",
+      data: schema,
+    });
+  } catch (error) {
+    console.error("Update schema error:", error);
+    return res.status(500).json({ message: "Failed to update schema" });
+  }
+};
+
+
+
+module.exports.toggleHoldSchema = async (req, res) => {
+  const { id } = req.body;
+  // 1. Fixed log statement to use 'id' instead of the undefined 'email' variable
+  console.log("schema ID for hold status toggle:", id);
+
+  try {
+    // 2. Find the schema using its ID
+    const schemaItem = await AgricultureScheme.findById(id);
+    if (!schemaItem) {
+      return res.status(404).json({ message: "Schema not found in database" });
+    }
+
+    // 3. Toggle the boolean value (true becomes false, false becomes true)
+    schemaItem.isActive = !schemaItem.isActive;
+    await schemaItem.save();
+
+    console.log("Schema updated status. isActive is now:", schemaItem.isActive);
+
+    // 4. Cleaned up the status messages to explicitly reference "Schema" instead of "Expert"
+    const statusMessage = schemaItem.isActive 
+      ? "Schema unheld (Activated) successfully" 
+      : "Schema placed on hold (Deactivated) successfully";
+
+    return res.status(200).json({ 
+      message: statusMessage,
+      isActive: schemaItem.isActive // Send this back so the React UI knows what changed
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to update schema hold status" });
   }
 };

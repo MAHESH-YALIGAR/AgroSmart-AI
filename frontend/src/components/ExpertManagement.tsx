@@ -13,6 +13,7 @@ import {
 
 type AgricultureExpert = {
   id: string;
+  _id?: string;
   photo: string | null;
   name: string;
   phone: string;
@@ -30,7 +31,9 @@ type AgricultureExpert = {
   updatedAt: string;
 };
 
-const BACKEND_API = import.meta.env.VITE_BACKEND_API;
+const BACKEND_API = (import.meta as ImportMeta & {
+  env: { VITE_BACKEND_API?: string };
+}).env.VITE_BACKEND_API;
 console.log(BACKEND_API)
 const ExpertManagement = () => {
   const [experts, setExperts] = useState<AgricultureExpert[]>([]);
@@ -146,20 +149,43 @@ const handleDelete = async (email: string) => {
     if (!editingExpert) return;
 
     try {
-      setExperts((prev) =>
-        prev.map((expert) =>
-          expert.id === editingExpert.id
-            ? editingExpert
-            : expert
-        )
+      const expertId = editingExpert._id || editingExpert.id;
+      const response = await axios.put(
+        `${BACKEND_API}/api/v1/addtional/expertedit/${expertId}`,
+        {
+          photo: editingExpert.photo,
+          name: editingExpert.name,
+          phone: editingExpert.phone,
+          email: editingExpert.email,
+          crop: editingExpert.crop,
+          state: editingExpert.state,
+          district: editingExpert.district,
+          taluka: editingExpert.taluka,
+          place: editingExpert.place,
+          experience: editingExpert.experience,
+          description: editingExpert.description,
+        }
       );
+
+      const updatedExpert = {
+        ...response.data.data,
+        id: response.data.data._id || expertId,
+        photo: response.data.data.photo || null,
+      };
+
+      setExperts((prev) => prev.map((expert) =>
+        expert.id === editingExpert.id ? updatedExpert : expert
+      ));
 
       setEditingExpert(null);
 
-      alert("Expert updated successfully");
+      alert(response.data.message || "Expert updated successfully");
     } catch (error) {
       console.error(error);
-      alert("Failed to update expert");
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : undefined;
+      alert(message || "Failed to update expert");
     }
   };
 
