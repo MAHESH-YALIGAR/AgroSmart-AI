@@ -4,6 +4,7 @@ import ProductSearchSelect from "./components/add_agrostores";
 import AddSchemasPage from "./components/addSchemas";
 import AllSchemas from "./components/allschemas";
 import AllStores from "./components/allstores";
+import AllCrops from "./components/allcrops";
 import ExpertManagement from "./components/ExpertManagement";
 
 import {
@@ -18,6 +19,7 @@ const navigationItems = [
   { label: "Add Expert", path: "/", icon: UsersRound, end: true },
   { label: "Agro Stores", path: "/addagrostores", icon: Store },
   { label: "All Stores", path: "/allagrostores", icon: Store },
+  { label: "Crops for Sale", path: "/allcrops", icon: Sprout },
   { label: "Schemes", path: "/addschema", icon: ClipboardList },
   { label: "All Schemes", path: "/allschemas", icon: ClipboardList },
   { label: "Expert Management", path: "/expert-management", icon: LayoutDashboard },
@@ -76,6 +78,10 @@ function App() {
         <Route
           path="/allagrostores"
           element={<AllStores />}
+        />
+        <Route
+          path="/allcrops"
+          element={<AllCrops />}
         />
   <Route
           path="/addschema"

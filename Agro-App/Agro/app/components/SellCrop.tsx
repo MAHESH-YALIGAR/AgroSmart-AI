@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import axios from "axios";
 import {
   Alert,
   Image,
@@ -18,6 +19,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Dropdown } from "react-native-element-dropdown";
 
 import { cropData } from "../data/cropData";
+
+const BACKEND = process.env.EXPO_PUBLIC_BACKEND_API || "";
 
 type FormState = {
   imageUri: string;
@@ -110,10 +113,15 @@ export default function SellCrop() {
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
+      base64: true,
     });
 
-    if (!result.canceled && result.assets[0]?.uri) {
-      updateField("imageUri", result.assets[0].uri);
+    const asset = result.canceled ? undefined : result.assets?.[0];
+    if (asset?.uri) {
+      const imageValue = asset.base64
+        ? `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`
+        : asset.uri;
+      updateField("imageUri", imageValue);
     }
   };
 
@@ -209,10 +217,19 @@ export default function SellCrop() {
 
       console.log("Crop for sale payload:", payload);
 
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const response = await axios.post(
+        `${BACKEND}/api/v1/sellcroprouter/createCropListing`,
+        payload,
+        {
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
-      setSubmitSuccess("Crop posted successfully. Buyers can now view your listing.");
-      handleReset();
+      setSubmitSuccess(
+        response.data?.message ||
+          "Crop posted successfully. Buyers can now view your listing."
+      );
+      handleReset(false);
     } catch (error: any) {
       console.log("Crop posting failed:", error);
       setSubmitError(error?.message || "Unable to post the crop right now. Please try again.");
@@ -221,11 +238,13 @@ export default function SellCrop() {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = (clearMessages = true) => {
     setForm(initialForm);
     setErrors({});
-    setSubmitError("");
-    setSubmitSuccess("");
+    if (clearMessages) {
+      setSubmitError("");
+      setSubmitSuccess("");
+    }
     setSelectedDate(new Date());
     setShowDatePicker(false);
   };
@@ -474,7 +493,7 @@ export default function SellCrop() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleReset}
+              onPress={() => handleReset()}
               className="rounded-2xl border border-green-200 bg-white px-4 py-3"
             >
               <Text className="text-base font-bold text-green-700">Reset</Text>
