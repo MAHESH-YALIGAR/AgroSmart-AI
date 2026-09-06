@@ -368,33 +368,6 @@ export default function AddAgroStorePage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-green-900 border-b-4 border-amber-500">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
-            <Sprout className="w-6 h-6 text-green-900" />
-          </div>
-          <div>
-            <p className="text-white font-semibold text-lg leading-tight tracking-wide">
-              AgroSmart AI
-            </p>
-            <p className="text-green-200 text-xs sm:text-sm leading-tight">
-              Agro Store Registration Portal
-            </p>
-          </div>
-        </div>
-      </header>
-
-      {/* Sub-header / breadcrumb strip */}
-      <div className="bg-green-800">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-2">
-          <p className="text-green-100 text-xs sm:text-sm font-medium">
-            Officer Dashboard &nbsp;/&nbsp; Agro Stores &nbsp;/&nbsp;{" "}
-            <span className="text-white">Add New Store</span>
-          </p>
-        </div>
-      </div>
-
       {/* Main content */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-6">

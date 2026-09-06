@@ -242,17 +242,7 @@ export default function AddSchemasPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-white text-slate-800">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6 rounded-3xl bg-gradient-to-r from-green-700 via-emerald-600 to-lime-500 px-6 py-6 text-white shadow-lg shadow-green-900/10">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-white/15 p-3 ring-1 ring-white/20">
-              <Landmark className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold sm:text-3xl">Release Government Scheme</h1>
-              <p className="mt-1 text-sm text-green-50">Publish agriculture-focused government schemes for farmers.</p>
-            </div>
-          </div>
-        </div>
+     
 
         <div className="grid gap-6 xl:grid-cols-[1.6fr_0.9fr]">
           <div className="rounded-3xl border border-green-100 bg-white p-5 shadow-sm shadow-green-100 sm:p-6">

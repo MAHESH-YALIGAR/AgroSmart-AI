@@ -94,6 +94,11 @@ const expertSchema = new Schema(
       type: Boolean,
       default: true,
     },
+//   isBlocked: {
+//   type: Boolean,
+//   default: false, // Accounts are open/active by default
+// },
+
   },
   {
     timestamps: true,
