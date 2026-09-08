@@ -1,9 +1,10 @@
 import json
+import re
 import uvicorn
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from services.face_service import register_face, face_login
-from input_types import ChatRequest, ChatResponse
+from input_types import ChatRequest
 from langchain_core.messages import HumanMessage, ToolMessage
 from agents.main_agent import compiled_graph
 from dotenv import load_dotenv
@@ -47,6 +48,129 @@ async def face_login_route(faceImage: UploadFile = File(...)):
 
 
 
+def sanitize_speech_text(text: str) -> str:
+    if not text:
+        return text
+
+    cleaned = text
+    cleaned = re.sub(r"(?m)^\s*[-*•#]+\s*", "", cleaned)
+    cleaned = re.sub(r"(?m)^\s*\d+\.\s*", "", cleaned)
+    cleaned = re.sub(r"\*\*|__|`", "", cleaned)
+    cleaned = cleaned.replace("#", "")
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = cleaned.strip()
+
+    return cleaned
+
+
+def normalize_tool_payload(content):
+    if isinstance(content, str):
+        try:
+            return json.loads(content)
+        except (TypeError, ValueError):
+            return content
+    return content
+
+
+def summarize_store_items(stores):
+    if not isinstance(stores, list):
+        return ""
+
+    lines = []
+
+    for store in stores:
+        if not isinstance(store, dict):
+            continue
+
+        name = store.get("storeName") or store.get("name") or store.get("shopName")
+        if not name:
+            continue
+
+        address_parts = [
+            store.get("place"),
+            store.get("taluka"),
+            store.get("district"),
+            store.get("state"),
+        ]
+        address = ", ".join(part for part in address_parts if part)
+        if store.get("address"):
+            address = store.get("address")
+
+        distance = store.get("distance")
+        distance_text = f"Distance: {distance} km" if distance is not None else ""
+
+        product_names = []
+        for product in store.get("products", []) or []:
+            if isinstance(product, dict):
+                product_name = product.get("product") or product.get("name")
+                if product_name:
+                    availability = product.get("availability")
+                    if availability and availability.lower() != "available":
+                        product_names.append(f"{product_name} ({availability})")
+                    else:
+                        product_names.append(product_name)
+
+        product_text = f"Products: {', '.join(product_names)}" if product_names else "Products: not listed"
+
+        line = f"{name}"
+        if address:
+            line += f", {address}"
+        if distance_text:
+            line += f", {distance_text}"
+        line += f", {product_text}"
+        if store.get("mobile"):
+            line += f", Phone: {store.get('mobile')}"
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def summarize_expert_items(experts):
+    if not isinstance(experts, list):
+        return ""
+
+    lines = []
+
+    for expert in experts:
+        if not isinstance(expert, dict):
+            continue
+
+        name = expert.get("name") or expert.get("expertName") or expert.get("fullName")
+        if not name:
+            continue
+
+        crop = expert.get("crop") or expert.get("cropSpecialization") or expert.get("specialization") or "Agriculture"
+        experience = expert.get("experience") or expert.get("experienceYears") or expert.get("yearsOfExperience")
+        phone = expert.get("phone") or expert.get("phoneNumber") or expert.get("contactNumber") or expert.get("mobile")
+        distance = expert.get("distance") or expert.get("distanceKm") or expert.get("distanceFromUser")
+
+        address_parts = [
+            expert.get("place"),
+            expert.get("taluka"),
+            expert.get("district"),
+            expert.get("state"),
+        ]
+        address = ", ".join(part for part in address_parts if part)
+        if expert.get("address"):
+            address = expert.get("address")
+
+        line = f"{name}"
+        line += f", {crop}"
+        if experience:
+            line += f", Experience: {experience} years"
+        if distance is not None:
+            line += f", Distance: {distance} km"
+        if phone:
+            line += f", Phone: {phone}"
+        if address:
+            line += f", Location: {address}"
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
 @app.post("/chat")
 async def chat_endpoint(
     photo: UploadFile = File(None),
@@ -57,8 +181,10 @@ async def chat_endpoint(
         # 1. Parse and validate using your Pydantic ChatRequest schema
         try:
             json_data = json.loads(payload)
+            if not isinstance(json_data, dict):
+                raise ValueError("payload must be a JSON object")
             request = ChatRequest(**json_data)
-        except (json.JSONDecodeError, ValidationError) as e:
+        except (json.JSONDecodeError, TypeError, ValueError, ValidationError) as e:
             raise HTTPException(status_code=422, detail=f"Invalid payload structure: {str(e)}")
 
         print(f"📥 Request from User: {request.userId} | Language: {request.language}")
@@ -66,11 +192,17 @@ async def chat_endpoint(
         # 2. Process image bytes directly for your own model
         # Safe default state so LangGraph nodes don't crash when reading it
         model_predictions = {
-            "detected_issue": None, 
-            "confidence": 0.0
+            "detected_issue": None,
+            "confidence": 0.0,
+            "message": "",
         }
 
-        if photo:
+        print(
+            "Received photo:",
+            photo.filename if photo is not None else "No file received",
+        )
+
+        if photo is not None:
             image_bytes = await photo.read()
             print(f"📸 Running custom model on uploaded file: {photo.filename}")
             
@@ -102,49 +234,62 @@ async def chat_endpoint(
         print("config data is:", config)
         print("input state is:", inputs)
         
-        # output = compiled_graph.invoke(inputs, config=config)
-        output = compiled_graph.invoke()
+        output = compiled_graph.invoke(inputs, config=config)
 
         # Extract last message
         final_message = output["messages"][-1].content
-        reply_text = str(final_message)
+        reply_text = sanitize_speech_text(str(final_message))
 
-        tool_message = None
-        for message in reversed(output.get("messages", [])):
-            if isinstance(message, ToolMessage):
-                tool_message = message
-                break
+        tool_messages = [message for message in output.get("messages", []) if isinstance(message, ToolMessage)]
 
         response_type = "text"
         response_data = None
+        tool_summaries = []
 
-        if tool_message is not None:
-            tool_name = getattr(tool_message, "name", None)
-            tool_content = tool_message.content
+        if tool_messages:
+            last_tool_message = tool_messages[-1]
+            tool_name = getattr(last_tool_message, "name", None)
+            tool_content = normalize_tool_payload(last_tool_message.content)
 
-            if isinstance(tool_content, str):
-                try: 
-                    parsed_content = json.loads(tool_content)
-                except (TypeError, ValueError): 
-                    parsed_content = tool_content
-            else:
-                parsed_content = tool_content
+            if isinstance(tool_content, list):
+                response_data = tool_content
+            elif isinstance(tool_content, dict):
+                response_data = [tool_content]
+            elif tool_content is not None:
+                response_data = [tool_content]
 
-            if isinstance(parsed_content, list): 
-                response_data = parsed_content
-            elif isinstance(parsed_content, dict): 
-                response_data = [parsed_content]
-            elif parsed_content is not None: 
-                response_data = [parsed_content]
-
-            if tool_name == "get_agro_store": 
+            if tool_name == "get_agro_store":
                 response_type = "agro_store"
-            elif tool_name == "get_agriculture_experts": 
+            elif tool_name == "get_agriculture_experts":
                 response_type = "expert"
-            elif tool_name == "get_weather": 
+            elif tool_name == "get_weather":
                 response_type = "weather"
-            elif tool_name == "get_market_prices": 
+            elif tool_name == "get_market_prices":
                 response_type = "market_price"
+
+            for tool_message in tool_messages:
+                parsed_content = normalize_tool_payload(tool_message.content)
+                if getattr(tool_message, "name", None) == "get_agro_store":
+                    if isinstance(parsed_content, dict) and parsed_content.get("success") is False:
+                        continue
+                    stores = parsed_content if isinstance(parsed_content, list) else []
+                    if isinstance(parsed_content, dict) and isinstance(parsed_content.get("data"), list):
+                        stores = parsed_content.get("data", [])
+                    store_summary = summarize_store_items(stores)
+                    if store_summary:
+                        tool_summaries.append(store_summary)
+                elif getattr(tool_message, "name", None) == "get_agriculture_experts":
+                    if isinstance(parsed_content, dict) and parsed_content.get("success") is False:
+                        continue
+                    experts = parsed_content if isinstance(parsed_content, list) else []
+                    if isinstance(parsed_content, dict) and isinstance(parsed_content.get("data"), list):
+                        experts = parsed_content.get("data", [])
+                    expert_summary = summarize_expert_items(experts)
+                    if expert_summary:
+                        tool_summaries.append(expert_summary)
+
+        if tool_summaries:
+            reply_text = sanitize_speech_text(f"{reply_text}\n\n{chr(10).join(tool_summaries)}")
 
         return {
             "status": "success",

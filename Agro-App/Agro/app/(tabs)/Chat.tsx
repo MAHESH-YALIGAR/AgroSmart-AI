@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
+import { speakText, stopSpeech } from "../../services/textToSpeech";
 const BACKEND_API = process.env.EXPO_PUBLIC_PYTHON_BACKEND_API || "http://192.168.244.122:8000";
 console.log("PYTHON BACKEND API:", BACKEND_API);
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -147,12 +148,43 @@ const ChatScreen = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const activeSpeechMessageIdRef = useRef<string | null>(null);
 
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   const { user } = useContext(UserContext);
 
-  const languages = ["Kannada", "English", "Hindi", "Tamil", "Marathi"];
+  const languages = ["Kannada", "English", "Hindi", "Tamil", "Telugu", "Malayalam", "Marathi"];
+
+  const handleAssistantSpeech = useCallback((messageId: string, text: string) => {
+    if (!text || !text.trim()) {
+      return;
+    }
+
+    const isCurrentSpeech = activeSpeechMessageIdRef.current === messageId;
+
+    if (isCurrentSpeech) {
+      stopSpeech();
+      activeSpeechMessageIdRef.current = null;
+      return;
+    }
+
+    stopSpeech();
+    activeSpeechMessageIdRef.current = messageId;
+
+    speakText(text, selectedLanguage, {
+      onError: (message) => {
+        Alert.alert("Text-to-Speech", message);
+        activeSpeechMessageIdRef.current = null;
+      },
+      onDone: () => {
+        activeSpeechMessageIdRef.current = null;
+      },
+      onStopped: () => {
+        activeSpeechMessageIdRef.current = null;
+      },
+    });
+  }, [selectedLanguage]);
 
   const handleLanguageSelect = (language: string) => {
     setSelectedLanguage(language);
@@ -425,9 +457,35 @@ const ChatScreen = () => {
           <Image source={{ uri: item.imageUri }} className="w-56 h-56 rounded-2xl mb-3" resizeMode="cover" />
         ) : null}
 
+        {item.type === "user" ? (
+          <Text className="text-white text-base">{item.text}</Text>
+        ) : null}
+
+        {item.type === "assistant" && item.kind === "text" ? (
+          <View className="flex-row items-center">
+            <Text className="text-gray-900">{item.text}</Text>
+            <TouchableOpacity
+              className="ml-3 p-2 rounded-full bg-green-100"
+              onPress={() => handleAssistantSpeech(item.id, item.text)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="volume-high-outline" size={18} color="#16A34A" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {isAssistantStructured ? (
           <View className="w-full">
-            <Text className="text-gray-900 font-semibold mb-3">{item.text}</Text>
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-gray-900 font-semibold">{item.text}</Text>
+              <TouchableOpacity
+                className="ml-3 p-2 rounded-full bg-green-100"
+                onPress={() => handleAssistantSpeech(item.id, item.text)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="volume-high-outline" size={18} color="#16A34A" />
+              </TouchableOpacity>
+            </View>
             {(item.data || []).map((entry: any, index: number) => {
               if (item.kind === "experts") {
                 const expert = entry;
@@ -533,12 +591,10 @@ const ChatScreen = () => {
               );
             })}
           </View>
-        ) : (
-          <Text className={item.type === "user" ? "text-white" : "text-gray-900"}>{item.text}</Text>
-        )}
+        ) : null}
       </View>
     );
-  }, [openGoogleMaps, openPhoneDialer]);
+  }, [handleAssistantSpeech, openGoogleMaps, openPhoneDialer]);
 
   return (
     <View className="flex-1 bg-white">
@@ -626,15 +682,15 @@ const ChatScreen = () => {
               <TouchableOpacity className="mr-4" onPress={handleTakePhoto} activeOpacity={0.8}>
                 <Ionicons name="camera" size={26} color="#16A34A" />
               </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8} onPress={() => setLanguageModalVisible(true)}>
+              <TouchableOpacity className="mr-4" activeOpacity={0.8} onPress={() => setLanguageModalVisible(true)}>
                 <MaterialIcons name="translate" size={26} color="#16A34A" />
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.8}>
+                <MaterialIcons name="keyboard-voice" size={28} color="#16A34A" />
               </TouchableOpacity>
             </View>
 
             <View className="flex-row items-center">
-              <TouchableOpacity className="mr-3">
-                <MaterialIcons name="keyboard-voice" size={28} color="#16A34A" />
-              </TouchableOpacity>
               <TouchableOpacity
                 className={
                   message.trim() || selectedImage

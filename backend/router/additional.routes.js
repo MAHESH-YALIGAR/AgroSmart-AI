@@ -19,5 +19,7 @@ router.put("/expertedit/:id",updateExpert)
 router.delete("/deleteschemas/:id",deleteschemas)
 router.put("/updateschema/:id",updateSchema)
 router.post("/toggleHoldSchema",toggleHoldSchema)
+router.get("/getallexpert",getallschemaforuser)
+
 
 module.exports =router;

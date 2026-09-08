@@ -108,7 +108,10 @@ const agroProducts = [
   "Sunflower Seeds",
   "Mustard Seeds",
   "Millet Seeds",
-  "Sorghum Seeds"
+  "Sorghum Seeds",
+  "bismith",
+  "copper based fungicide"
+
 ];
 
 export default agroProducts;

@@ -4,6 +4,28 @@ const { Schema } = mongoose;
 
 const cropSellSchema = new Schema(
 	{
+		ownerId: {
+			type: Schema.Types.ObjectId,
+			ref: "User",
+			required: true,
+			index: true,
+		},
+
+		ownerEmail: {
+			type: String,
+			trim: true,
+			lowercase: true,
+			index: true,
+		},
+
+		ownerEmail: {
+			type: String,
+			required: true,
+			trim: true,
+			lowercase: true,
+			index: true,
+		},
+
 		imageUri: {
 			type: String,
 			trim: true,
@@ -60,10 +82,10 @@ const cropSellSchema = new Schema(
 
 		email: {
 			type: String,
+			required: true,
 			trim: true,
 			lowercase: true,
-			match: [/^$|^\S+@\S+\.\S+$/, "Enter a valid email address"],
-			default: "",
+			match: [/^\S+@\S+\.\S+$/, "Enter a valid email address"],
 		},
 
 		description: {
@@ -101,6 +123,12 @@ const cropSellSchema = new Schema(
 		isActive: {
 			type: Boolean,
 			default: true,
+		},
+
+		status: {
+			type: String,
+			enum: ["active", "sold", "paused"],
+			default: "active",
 		},
 	},
 	{

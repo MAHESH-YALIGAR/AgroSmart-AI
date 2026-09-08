@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   Alert,
@@ -19,6 +19,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Dropdown } from "react-native-element-dropdown";
 
 import { cropData } from "../data/cropData";
+import { UserContext } from "../context/UserContext";
 
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_API || "";
 
@@ -80,7 +81,8 @@ const FieldLabel = ({ label, required = false }: { label: string; required?: boo
   </Text>
 );
 
-export default function SellCrop() {
+export default function SellCrop({ onOpenListings }: { onOpenListings?: () => void }) {
+  const { user } = useContext(UserContext);
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<FormErrors>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -88,6 +90,12 @@ export default function SellCrop() {
   const [loading, setLoading] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState("");
   const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    if (user?.email) {
+      setForm((previous) => ({ ...previous, email: user.email.toLowerCase() }));
+    }
+  }, [user?.email]);
 
   const cropOptions = useMemo<DropdownOption[]>(() => {
     return cropData.map((crop) => ({ label: crop, value: crop }));
@@ -150,7 +158,9 @@ export default function SellCrop() {
       nextErrors.mobileNumber = "Please enter a valid 10-digit mobile number.";
     }
 
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    if (!form.email.trim()) {
+      nextErrors.email = "Email is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       nextErrors.email = "Please enter a valid email address.";
     }
 
@@ -216,12 +226,16 @@ export default function SellCrop() {
       };
 
       console.log("Crop for sale payload:", payload);
+      const token = await AsyncStorage.getItem("token");
 
       const response = await axios.post(
         `${BACKEND}/api/v1/sellcroprouter/createCropListing`,
         payload,
         {
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 
@@ -239,7 +253,7 @@ export default function SellCrop() {
   };
 
   const handleReset = (clearMessages = true) => {
-    setForm(initialForm);
+    setForm({ ...initialForm, email: user?.email?.toLowerCase() || "" });
     setErrors({});
     if (clearMessages) {
       setSubmitError("");
@@ -443,11 +457,11 @@ export default function SellCrop() {
             </View>
 
             <View>
-              <FieldLabel label="Email" />
+              <FieldLabel label="Email" required />
               <TextInput
                 value={form.email}
-                onChangeText={(value) => updateField("email", value)}
-                placeholder="Enter email address"
+                editable={false}
+                placeholder="Account email"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 className="rounded-2xl border border-green-200 bg-white px-4 py-3 text-base text-gray-800"
@@ -482,6 +496,14 @@ export default function SellCrop() {
           ) : null}
 
           <View className="mt-6 flex-row gap-3">
+            {onOpenListings ? (
+              <TouchableOpacity
+                onPress={onOpenListings}
+                className="flex-1 rounded-2xl border border-green-700 bg-white px-4 py-3"
+              >
+                <Text className="text-center text-base font-bold text-green-700">My Listings</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               onPress={handleSubmit}
               disabled={loading}

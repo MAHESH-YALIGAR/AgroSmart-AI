@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import agroProducts from "../data/products";
 import {
   Ban,
   CheckCircle,
@@ -15,6 +16,11 @@ import {
 type StoreProduct = {
   product: string;
   availability: "Available" | "Out of Stock";
+};
+
+type Product = {
+  id: string;
+  name: string;
 };
 
 type AgroStore = {
@@ -45,6 +51,11 @@ type StoreForm = Omit<AgroStore, "_id" | "isActive" | "createdAt" | "products"> 
 const BACKEND_API = (import.meta as ImportMeta & {
   env: { VITE_BACKEND_API?: string };
 }).env.VITE_BACKEND_API;
+
+const PRODUCT_MASTER_LIST: Product[] = agroProducts.map((productName) => ({
+  id: productName,
+  name: productName,
+}));
 
 const emptyForm: StoreForm = {
   logo: "",
@@ -100,6 +111,7 @@ export default function AllStores() {
   const [error, setError] = useState("");
   const [editingStore, setEditingStore] = useState<AgroStore | null>(null);
   const [editForm, setEditForm] = useState<StoreForm>(emptyForm);
+  const [productQuery, setProductQuery] = useState("");
 
   useEffect(() => {
     async function loadStores() {
@@ -132,6 +144,45 @@ export default function AllStores() {
 
   function updateField(field: keyof StoreForm, value: string) {
     setEditForm((current) => ({ ...current, [field]: value }));
+  }
+
+  const filteredProducts = useMemo(() => {
+    const query = productQuery.trim().toLowerCase();
+
+    return PRODUCT_MASTER_LIST.filter((product) => {
+      const alreadySelected = editForm.products.some(
+        (item) => item.product.toLowerCase() === product.name.toLowerCase()
+      );
+
+      if (alreadySelected) return false;
+      if (!query) return true;
+
+      return product.name.toLowerCase().includes(query);
+    });
+  }, [editForm.products, productQuery]);
+
+  function addProductToEdit(productName: string) {
+    setEditForm((current) => ({
+      ...current,
+      products: [...current.products, { product: productName, availability: "Available" }],
+    }));
+    setProductQuery("");
+  }
+
+  function removeProductFromEdit(productName: string) {
+    setEditForm((current) => ({
+      ...current,
+      products: current.products.filter((item) => item.product !== productName),
+    }));
+  }
+
+  function updateProductAvailability(productName: string, availability: StoreProduct["availability"]) {
+    setEditForm((current) => ({
+      ...current,
+      products: current.products.map((item) =>
+        item.product === productName ? { ...item, availability } : item
+      ),
+    }));
   }
 
   async function saveEdit(event: React.FormEvent<HTMLFormElement>) {
@@ -244,7 +295,7 @@ export default function AllStores() {
         </div>
       </div>
 
-      {editingStore && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><form onSubmit={saveEdit} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl"><div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold text-slate-900">Edit agro store</h2><button type="button" onClick={() => setEditingStore(null)} aria-label="Close edit form"><X className="h-5 w-5" /></button></div><div className="grid gap-4 sm:grid-cols-2">{(["storeName", "ownerName", "mobile", "email", "licenseNumber", "state", "district", "taluka", "place", "openingTime", "closingTime", "address"] as Array<keyof StoreForm>).map((field) => <label key={field} className="text-sm font-medium capitalize text-slate-700">{field.replace(/([A-Z])/g, " $1")}<input value={String(editForm[field] || "")} onChange={(event) => updateField(field, event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100" /></label>)}<label className="text-sm font-medium text-slate-700 sm:col-span-2">Description<textarea value={editForm.description || ""} onChange={(event) => updateField("description", event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100" /></label></div><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setEditingStore(null)} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700">Cancel</button><button type="submit" className="rounded-lg bg-green-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-800">Save changes</button></div></form></div>}
+      {editingStore && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><form onSubmit={saveEdit} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl"><div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold text-slate-900">Edit agro store</h2><button type="button" onClick={() => setEditingStore(null)} aria-label="Close edit form"><X className="h-5 w-5" /></button></div><div className="grid gap-4 sm:grid-cols-2">{(["storeName", "ownerName", "mobile", "email", "licenseNumber", "state", "district", "taluka", "place", "openingTime", "closingTime", "address"] as Array<keyof StoreForm>).map((field) => <label key={field} className="text-sm font-medium capitalize text-slate-700">{field.replace(/([A-Z])/g, " $1")}<input value={String(editForm[field] || "")} onChange={(event) => updateField(field, event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100" /></label>)}<label className="text-sm font-medium text-slate-700 sm:col-span-2">Description<textarea value={editForm.description || ""} onChange={(event) => updateField("description", event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100" /></label></div><div className="mt-6 border-t border-slate-200 pt-5"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Products</h3></div><div className="relative"><input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Search and add product" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100" />{productQuery.trim() && filteredProducts.length > 0 && <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">{filteredProducts.slice(0, 8).map((product) => <button key={product.id} type="button" onClick={() => addProductToEdit(product.name)} className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-700 hover:bg-green-50 last:border-b-0">{product.name}</button>)}</div>}</div>{editForm.products.length === 0 ? <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">No products added yet. Search above to add a product.</div> : <div className="mt-4 space-y-2">{editForm.products.map((item, index) => <div key={`${item.product}-${index}`} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex-1 text-sm font-medium text-slate-700">{item.product}</span><select value={item.availability} onChange={(event) => updateProductAvailability(item.product, event.target.value as StoreProduct["availability"])} className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"><option value="Available">Available</option><option value="Out of Stock">Out of Stock</option></select><button type="button" onClick={() => removeProductFromEdit(item.product)} className="rounded-md border border-red-200 px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Remove</button></div>)}</div>}</div><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setEditingStore(null)} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700">Cancel</button><button type="submit" className="rounded-lg bg-green-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-800">Save changes</button></div></form></div>}
     </main>
   );
 }
