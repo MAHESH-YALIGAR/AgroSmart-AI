@@ -206,8 +206,8 @@ export default function AddExpertPage() {
     setSubmitMessage("");
 
     const endpoint = BACKEND_API
-      ? `${BACKEND_API}/api/v1/webrouter/createExpert`
-      : "/api/v1/webrouter/createExpert";
+      ? `${BACKEND_API}/api/v1/webrouter/createExpertRequest`
+      : "/api/v1/webrouter/createExpertRequest";
 
     const payload = {
       photo: photoPreview,

@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 import uvicorn
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,10 +9,20 @@ from input_types import ChatRequest
 from langchain_core.messages import HumanMessage, ToolMessage
 from agents.main_agent import compiled_graph
 from dotenv import load_dotenv
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from model_predictor import predict_from_image
+from mongo_client import db
 load_dotenv()
 app = FastAPI()
+
+
+class ExpertFeedbackPayload(BaseModel):
+    userId: str = Field(..., min_length=1)
+    expertId: str = Field(..., min_length=1)
+    adviceId: str = Field(..., min_length=1)
+    rating: int = Field(..., ge=1, le=5)
+    feedbackText: str = Field(..., min_length=1)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,6 +35,74 @@ app.add_middleware(
 @app.get("/")
 def home():
     return {"success": True, "message": "AgroSmart AI Server Running"}
+
+
+def infer_category(feedback_text: str) -> str:
+    text = (feedback_text or "").lower()
+
+    if any(keyword in text for keyword in ["improved", "helped", "effective", "good", "works", "success"]):
+        return "treatment_effective"
+
+    if any(keyword in text for keyword in ["not effective", "failed", "worse", "bad", "did not work", "no improvement"]):
+        return "treatment_not_effective"
+
+    return "general_feedback"
+
+
+def infer_sentiment(feedback_text: str, rating: int) -> str:
+    text = (feedback_text or "").lower()
+
+    positive_keywords = ["good", "helped", "effective", "improved", "great", "excellent", "works", "success"]
+    negative_keywords = ["bad", "failed", "worse", "not effective", "did not work", "poor"]
+
+    if rating >= 4 or any(keyword in text for keyword in positive_keywords):
+        return "positive"
+
+    if rating <= 2 or any(keyword in text for keyword in negative_keywords):
+        return "negative"
+
+    return "neutral"
+
+
+@app.post("/expert-feedback")
+async def submit_expert_feedback(payload: ExpertFeedbackPayload):
+    feedback_document = {
+        "userId": payload.userId,
+        "expertId": payload.expertId,
+        "adviceId": payload.adviceId,
+        "rating": payload.rating,
+        "feedbackText": payload.feedbackText,
+        "category": infer_category(payload.feedbackText),
+        "sentiment": infer_sentiment(payload.feedbackText, payload.rating),
+        "createdAt": datetime.utcnow(),
+    }
+
+    result = db["expert_feedbacks"].insert_one(feedback_document)
+
+    feedback_document["_id"] = str(result.inserted_id)
+
+    return {
+        "success": True,
+        "message": "Feedback submitted successfully",
+        "data": feedback_document,
+    }
+
+
+@app.get("/expert-feedbacks/{expertId}")
+async def get_expert_feedbacks(expertId: str):
+    feedbacks = list(
+        db["expert_feedbacks"]
+        .find({"expertId": expertId})
+        .sort("createdAt", -1)
+    )
+
+    for item in feedbacks:
+        item["_id"] = str(item["_id"])
+
+    return {
+        "success": True,
+        "data": feedbacks,
+    }
 
 
 @app.post("/register-face")

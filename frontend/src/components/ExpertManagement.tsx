@@ -11,6 +11,30 @@ import {
   MessageSquareText
 } from "lucide-react";
 
+type ExpertFeedback = {
+  _id?: string;
+  id?: string;
+  expertId?: string;
+  userId?: string;
+  adviceId?: string;
+  rating?: number;
+  feedbackText?: string;
+  category?: string;
+  sentiment?: string;
+  createdAt?: string;
+};
+
+type FeedbackSummary = {
+  averageRating: number;
+  totalReviews: number;
+  sentimentCounts: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
+  categoryCounts: Record<string, number>;
+};
+
 type AgricultureExpert = {
   id: string;
   _id?: string;
@@ -29,12 +53,86 @@ type AgricultureExpert = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  feedbackSummary?: FeedbackSummary;
 };
 
 const BACKEND_API = (import.meta as ImportMeta & {
-  env: { VITE_BACKEND_API?: string };
-}).env.VITE_BACKEND_API;
-console.log(BACKEND_API)
+  env: { VITE_BACKEND_API?: string; VITE_PYTHON_BACKEND_API?: string };
+}).env.VITE_BACKEND_API || "http://localhost:9008";
+const PYTHON_BACKEND_API = (import.meta as ImportMeta & {
+  env: { VITE_PYTHON_BACKEND_API?: string };
+}).env.VITE_PYTHON_BACKEND_API || "http://localhost:8000";
+
+const createEmptyFeedbackSummary = (): FeedbackSummary => ({
+  averageRating: 0,
+  totalReviews: 0,
+  sentimentCounts: {
+    positive: 0,
+    neutral: 0,
+    negative: 0,
+  },
+  categoryCounts: {},
+});
+
+const buildFeedbackSummary = (feedbacks: ExpertFeedback[] = []): FeedbackSummary => {
+  const summary = createEmptyFeedbackSummary();
+
+  if (!feedbacks.length) {
+    return summary;
+  }
+
+  let totalRating = 0;
+
+  feedbacks.forEach((feedback) => {
+    const rating = typeof feedback.rating === "number" ? feedback.rating : 0;
+    totalRating += rating;
+
+    const category = feedback.category || "general_feedback";
+    summary.categoryCounts[category] = (summary.categoryCounts[category] || 0) + 1;
+
+    const sentiment = (feedback.sentiment || "neutral").toLowerCase();
+
+    if (sentiment === "positive") {
+      summary.sentimentCounts.positive += 1;
+    } else if (sentiment === "negative") {
+      summary.sentimentCounts.negative += 1;
+    } else {
+      summary.sentimentCounts.neutral += 1;
+    }
+  });
+
+  summary.averageRating = totalRating / feedbacks.length;
+  summary.totalReviews = feedbacks.length;
+
+  return summary;
+};
+
+const getCategoryLabel = (category: string) => {
+  const labelMap: Record<string, string> = {
+    treatment_effective: "Treatment Effective",
+    treatment_not_effective: "Treatment Not Effective",
+    general_feedback: "General Feedback",
+  };
+
+  return labelMap[category] ||
+    category.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const sentimentMeta = {
+  positive: {
+    label: "Positive",
+    className: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  },
+  neutral: {
+    label: "Neutral",
+    className: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  },
+  negative: {
+    label: "Negative",
+    className: "bg-rose-100 text-rose-700 border-rose-200",
+  },
+};
+
 const ExpertManagement = () => {
   const [experts, setExperts] = useState<AgricultureExpert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,18 +147,55 @@ const ExpertManagement = () => {
         const endpoint = `${BACKEND_API}/api/v1/addtional/govtgetexpert`;
         const response = await axios.post(endpoint);
         const responseData = response.data;
-        console.log("this is the  ex[pert reponse",responseData)
         const expertList = Array.isArray(responseData)
           ? responseData
           : responseData?.data || responseData?.experts || [];
 
-        setExperts(
-          expertList.map((expert: AgricultureExpert & { _id?: string }) => ({
+        const normalizedExperts = expertList.map(
+          (expert: AgricultureExpert & { _id?: string }) => ({
             ...expert,
             id: expert.id || expert._id || crypto.randomUUID(),
             photo: expert.photo || null,
-          }))
+            feedbackSummary: createEmptyFeedbackSummary(),
+          })
         );
+
+        const expertsWithFeedback = await Promise.all(
+          normalizedExperts.map(async (expert) => {
+            if (!PYTHON_BACKEND_API) {
+              return expert;
+            }
+
+            try {
+              const feedbackEndpoint = `${PYTHON_BACKEND_API.replace(
+                /\/$/,
+                ""
+              )}/expert-feedbacks/${encodeURIComponent(expert._id || expert.id)}`;
+
+              const feedbackResponse = await axios.get(feedbackEndpoint);
+              const feedbacks = Array.isArray(feedbackResponse.data?.data)
+                ? feedbackResponse.data.data
+                : [];
+
+              return {
+                ...expert,
+                feedbackSummary: buildFeedbackSummary(feedbacks),
+              };
+            } catch (error) {
+              console.error(
+                `Error fetching feedback for expert ${expert.email}:`,
+                error
+              );
+
+              return {
+                ...expert,
+                feedbackSummary: createEmptyFeedbackSummary(),
+              };
+            }
+          })
+        );
+
+        setExperts(expertsWithFeedback);
       } catch (error) {
         console.error("Error fetching experts:", error);
         setLoadError("Failed to load experts from the server.");
@@ -108,7 +243,7 @@ const handleDelete = async (email: string) => {
 
 
   const handleBlock = async (email: string, isActive: boolean) => {
-  const actionText = isActive ? "unblock" : "block";
+  const actionText = isActive ? "block" : "unblock";
   const confirmAction = window.confirm(
     `Are you sure you want to ${actionText} this expert?`
   );
@@ -267,12 +402,12 @@ const handleDelete = async (email: string) => {
                   {/* STATUS */}
 
                   {expert.isActive ? (
-                    <span className="px-3 py-1 rounded-full text-xs bg-red-100 text-red-700">
-                      Blocked
-                    </span>
-                  ) : (
                     <span className="px-3 py-1 rounded-full text-xs bg-green-100 text-green-700">
                       Active
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full text-xs bg-red-100 text-red-700">
+                      Blocked
                     </span>
                   )}
 
@@ -349,13 +484,77 @@ const handleDelete = async (email: string) => {
                   </div>
 
                   <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
-                      <MessageSquareText size={16} />
-                      Feedback review
+                    <div className="flex items-center justify-between gap-2 text-sm font-semibold text-amber-800">
+                      <div className="flex items-center gap-2">
+                        <MessageSquareText size={16} />
+                        Feedback review
+                      </div>
+                      {expert.feedbackSummary && expert.feedbackSummary.totalReviews > 0 && (
+                        <span className="text-xs rounded-full bg-amber-200 px-2 py-1 text-amber-800">
+                          {expert.feedbackSummary.totalReviews} review{expert.feedbackSummary.totalReviews > 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
-                    <p className="mt-1 text-xs text-amber-700">
-                      No feedback available yet. Reviews will appear here when the feedback feature is added.
-                    </p>
+
+                    {expert.feedbackSummary && expert.feedbackSummary.totalReviews > 0 ? (
+                      <div className="mt-3 space-y-3">
+                        <div className="rounded-lg bg-white border border-amber-200 p-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <span
+                                  key={star}
+                                  className={
+                                    star <= Math.round(expert.feedbackSummary!.averageRating)
+                                      ? "text-yellow-500 text-base"
+                                      : "text-gray-300 text-base"
+                                  }
+                                >
+                                  ★
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-sm font-bold text-amber-800">
+                              {expert.feedbackSummary.averageRating.toFixed(1)}/5
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          {Object.entries(sentimentMeta).map(([key, meta]) => (
+                            <div
+                              key={key}
+                              className={`rounded-lg border p-2 text-center ${meta.className}`}
+                            >
+                              <div className="font-bold">{meta.label}</div>
+                              <div className="mt-1 text-sm">
+                                {expert.feedbackSummary!.sentimentCounts[key as keyof typeof expert.feedbackSummary.sentimentCounts]}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="rounded-lg bg-white border border-amber-200 p-2">
+                          <p className="text-xs font-semibold text-amber-800 mb-2">Categories</p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(expert.feedbackSummary.categoryCounts).map(
+                              ([category, count]) => (
+                                <span
+                                  key={category}
+                                  className="rounded-full bg-amber-100 border border-amber-200 px-2 py-1 text-[10px] text-amber-800"
+                                >
+                                  {getCategoryLabel(category)} ({count})
+                                </span>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-amber-700">
+                        No feedback available yet.
+                      </p>
+                    )}
                   </div>
 
                   <div className="border-t border-gray-100 pt-3 text-xs text-gray-400">
@@ -388,24 +587,24 @@ const handleDelete = async (email: string) => {
                 {/* BLOCK */}
 
                 <button
-                  onClick={() => handleBlock(expert.email,expert.isActive)}
+                  onClick={() => handleBlock(expert.email, expert.isActive)}
                   className={`flex items-center justify-center gap-2
                   py-2 rounded-lg
                   ${
                     expert.isActive
-                      ? "bg-green-50 text-green-600 hover:bg-green-100"
-                      : "bg-orange-50 text-orange-600 hover:bg-orange-100"
+                      ? "bg-orange-50 text-orange-600 hover:bg-orange-100"
+                      : "bg-green-50 text-green-600 hover:bg-green-100"
                   }`}
                 >
                   {expert.isActive ? (
                     <>
-                      <CheckCircle size={17} />
-                      Unblock
+                      <Ban size={17} />
+                      Block
                     </>
                   ) : (
                     <>
-                      <Ban size={17} />
-                      Block
+                      <CheckCircle size={17} />
+                      Unblock
                     </>
                   )}
                 </button>

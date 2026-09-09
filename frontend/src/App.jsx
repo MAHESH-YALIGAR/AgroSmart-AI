@@ -6,6 +6,7 @@ import AllSchemas from "./components/allschemas";
 import AllStores from "./components/allstores";
 import AllCrops from "./components/allcrops";
 import ExpertManagement from "./components/ExpertManagement";
+import ExpertRequests from "./components/expert_request";
 
 import {
   BrowserRouter,
@@ -22,6 +23,7 @@ const navigationItems = [
   { label: "Crops for Sale", path: "/allcrops", icon: Sprout },
   { label: "Schemes", path: "/addschema", icon: ClipboardList },
   { label: "All Schemes", path: "/allschemas", icon: ClipboardList },
+  { label: "Expert Requests", path: "/expert-requests", icon: LayoutDashboard },
   { label: "Expert Management", path: "/expert-management", icon: LayoutDashboard },
 ];
 
@@ -91,7 +93,11 @@ function App() {
           path="/allschemas"
           element={<AllSchemas />}
         />
-       <Route
+        <Route
+          path="/expert-requests"
+          element={<ExpertRequests />}
+        />
+        <Route
           path="/expert-management"
           element={<ExpertManagement/>}
         />

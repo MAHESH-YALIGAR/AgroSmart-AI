@@ -1,5 +1,65 @@
 const Expert = require("../models/expert.model");
+const ExpertRequest = require("../models/expertRequest.model");
 const { resolveLocationFromPlace } = require("../services/geocode");
+
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+
+const buildExpertPayload = (reqBody = {}, createdBy = null) => {
+  const {
+    photo,
+    name,
+    phone,
+    email,
+    crop,
+    state,
+    district,
+    taluka,
+    place,
+    experience,
+    description,
+  } = reqBody;
+
+  return {
+    photo,
+    name,
+    phone,
+    email: normalizeEmail(email),
+    crop,
+    state,
+    district,
+    taluka,
+    place,
+    experience,
+    description,
+    createdBy,
+  };
+};
+
+const createExpertRecord = async (payload) => {
+  const normalizedEmail = normalizeEmail(payload.email);
+
+  const existingExpert = await Expert.findOne({ email: normalizedEmail });
+
+  if (existingExpert) {
+    const error = new Error("An expert with this email already exists");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const location = await resolveLocationFromPlace(
+    payload.state,
+    payload.district,
+    payload.taluka,
+    payload.place
+  );
+
+  return Expert.create({
+    ...payload,
+    email: normalizedEmail,
+    location,
+    isActive: true,
+  });
+};
 
 /**
  * @desc   Create a new agriculture expert
@@ -9,22 +69,8 @@ const { resolveLocationFromPlace } = require("../services/geocode");
 exports.createExpert = async (req, res) => {
   try {
     const {
-      photo,
-      name,
-      phone,
       email,
-      crop,
-      state,
-      district,
-      taluka,
-      place,
-      experience,
-      description,
     } = req.body;
-
-    // ==========================================
-    // 1. Validate email
-    // ==========================================
 
     if (!email || email.trim() === "") {
       return res.status(400).json({
@@ -33,78 +79,170 @@ exports.createExpert = async (req, res) => {
       });
     }
 
-    // Normalize email
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // ==========================================
-    // 2. CHECK WHETHER EMAIL ALREADY EXISTS
-    // ==========================================
-
-    const existingExpert = await Expert.findOne({
-      email: normalizedEmail,
-    });
-
-    if (existingExpert) {
-      return res.status(409).json({
-        success: false,
-        message: "An expert with this email already exists",
-      });
-    }
-
-    // ==========================================
-    // 3. Resolve location
-    // ==========================================
-
-    const location = await resolveLocationFromPlace(
-      state,
-      district,
-      taluka,
-      place
+    const expert = await createExpertRecord(
+      buildExpertPayload(req.body, req.user?._id)
     );
-
-    // ==========================================
-    // 4. Create expert
-    // ==========================================
-
-    const expert = await Expert.create({
-      photo,
-      name,
-      phone,
-      email: normalizedEmail,
-      crop,
-      state,
-      district,
-      taluka,
-      place,
-      location,
-      experience,
-      description,
-      createdBy: req.user?._id,
-    });
-
-    // ==========================================
-    // 5. Response
-    // ==========================================
 
     return res.status(201).json({
       success: true,
       message: "Expert created successfully",
       data: expert,
     });
-
   } catch (error) {
-
-    // ==========================================
-    // 6. MongoDB duplicate key protection
-    // ==========================================
-
-    if (error.code === 11000) {
+    if (error.statusCode === 409 || error.code === 11000) {
       return res.status(409).json({
         success: false,
         message: "An expert with this email already exists",
       });
     }
 
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.createExpertRequest = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || email.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+
+    const existingExpert = await Expert.findOne({ email: normalizedEmail });
+    const existingRequest = await ExpertRequest.findOne({ email: normalizedEmail });
+
+    if (existingExpert || existingRequest) {
+      return res.status(409).json({
+        success: false,
+        message: "An expert request with this email already exists",
+      });
+    }
+
+    const location = await resolveLocationFromPlace(
+      req.body.state,
+      req.body.district,
+      req.body.taluka,
+      req.body.place
+    );
+
+    const request = await ExpertRequest.create({
+      ...buildExpertPayload(req.body, req.user?._id),
+      email: normalizedEmail,
+      location,
+      status: "pending",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Expert request submitted successfully",
+      data: request,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "An expert request with this email already exists",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.getExpertRequests = async (req, res) => {
+  try {
+    const requests = await ExpertRequest.find({}).sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      data: requests,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.approveExpertRequest = async (req, res) => {
+  try {
+    const request = await ExpertRequest.findById(req.params.id);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Expert request not found",
+      });
+    }
+
+    const existingExpert = await Expert.findOne({ email: request.email });
+
+    if (existingExpert) {
+      return res.status(409).json({
+        success: false,
+        message: "This expert already exists in the expert database",
+      });
+    }
+
+    const { _id, status, approvedAt, pausedAt, createdAt, updatedAt, ...expertData } = request.toObject();
+
+    const expert = await Expert.create({
+      ...expertData,
+      isActive: true,
+      createdBy: request.createdBy || req.user?._id,
+    });
+
+    request.status = "approved";
+    request.approvedAt = new Date();
+    request.pausedAt = null;
+    await request.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Expert request approved and added to the expert database",
+      data: expert,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.pauseExpertRequest = async (req, res) => {
+  try {
+    const request = await ExpertRequest.findById(req.params.id);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Expert request not found",
+      });
+    }
+
+    request.status = "paused";
+    request.pausedAt = new Date();
+    await request.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Expert request paused and kept in the request list",
+      data: request,
+    });
+  } catch (error) {
     return res.status(500).json({
       success: false,
       message: error.message,

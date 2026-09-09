@@ -239,7 +239,7 @@ def get_agriculture_experts(
         },
         {
             "$project": {
-                "_id": 0,
+                "_id": {"$toString": "$_id"},
                 "name": 1,
                 "phone": 1,
                 "email": 1,

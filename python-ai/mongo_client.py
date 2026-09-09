@@ -7,9 +7,11 @@ load_dotenv()
 
 # 2. Fetch the URI string and assign it to the variable
 MONGO_URI = os.getenv("MONGO_URI")
+DATABASE_NAME = os.getenv("DATABASE_NAME")
 
 # 3. Create the MongoDB client
 Mongo_client = MongoClient(MONGO_URI)
+db = Mongo_client[DATABASE_NAME]
 
 # Optional: Ping the database to verify the connection
 try:

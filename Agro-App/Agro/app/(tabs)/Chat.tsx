@@ -11,6 +11,7 @@ import {
   Modal,
   Animated,
   Dimensions,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -148,6 +149,10 @@ const ChatScreen = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const [selectedExpertDetail, setSelectedExpertDetail] = useState<any | null>(null);
+  const [expertFeedbackDrafts, setExpertFeedbackDrafts] = useState<
+    Record<string, { rating: number; comment: string }>
+  >({});
   const activeSpeechMessageIdRef = useRef<string | null>(null);
 
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
@@ -216,6 +221,39 @@ const ChatScreen = () => {
 
     checkAllStorageKeys();
   }, []);
+  useEffect(() => {
+    const expertId = selectedExpertDetail?._id || selectedExpertDetail?.email;
+
+    if (!expertId) {
+      return;
+    }
+
+    const fetchExpertFeedbacks = async () => {
+      try {
+        const response = await axios.get(
+          `${BACKEND_API.replace(/\/$/, "")}/expert-feedbacks/${encodeURIComponent(expertId)}`
+        );
+
+        const feedbacks = response?.data?.data || [];
+
+        setSelectedExpertDetail((prev: any) => {
+          if (!prev) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            feedbacks,
+          };
+        });
+      } catch (error) {
+        console.log("Unable to load expert feedback in chat modal:", error);
+      }
+    };
+
+    fetchExpertFeedbacks();
+  }, [selectedExpertDetail?._id, selectedExpertDetail?.email]);
+
   useEffect(() => {
     Animated.timing(slideAnim, {
       toValue: sidebarOpen ? 0 : -SIDEBAR_WIDTH,
@@ -417,6 +455,101 @@ const ChatScreen = () => {
     Linking.openURL(`tel:${phoneNumber}`);
   }, []);
 
+  const getExpertFeedbackSummary = (feedbacks: any[] = []) => {
+    const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+    if (!feedbacks.length) {
+      return {
+        average: 0,
+        totalRatings: 0,
+        distribution,
+      };
+    }
+
+    let totalValue = 0;
+
+    feedbacks.forEach((item) => {
+      const rating = Math.min(Math.max(Number(item?.rating ?? 0), 1), 5);
+      totalValue += rating;
+      distribution[rating as keyof typeof distribution] += 1;
+    });
+
+    return {
+      average: totalValue / feedbacks.length,
+      totalRatings: feedbacks.length,
+      distribution,
+    };
+  };
+
+  const updateExpertFeedbackDraft = (expertKey: string, field: "rating" | "comment", value: number | string) => {
+    setExpertFeedbackDrafts((prev) => ({
+      ...prev,
+      [expertKey]: {
+        rating: prev[expertKey]?.rating ?? 0,
+        comment: prev[expertKey]?.comment ?? "",
+        [field]: value,
+      },
+    }));
+  };
+
+  const selectedExpertDetailKey = selectedExpertDetail
+    ? selectedExpertDetail._id || selectedExpertDetail.email || selectedExpertDetail.name || "expert-detail"
+    : "expert-detail";
+  const selectedExpertDraft = expertFeedbackDrafts[selectedExpertDetailKey] || { rating: 0, comment: "" };
+  const selectedExpertFeedbackSummary = getExpertFeedbackSummary(selectedExpertDetail?.feedbacks || []);
+
+  const submitExpertFeedback = async (expert: any) => {
+    const expertKey = expert?._id || expert?.email || expert?.name || "expert-detail";
+    const draft = expertFeedbackDrafts[expertKey] || { rating: 0, comment: "" };
+
+    if (draft.rating === 0) {
+      Alert.alert("Please select a rating before submitting feedback.");
+      return;
+    }
+
+    const payload = {
+      userId: userid || "USER_123",
+      expertId: expert?._id || expert?.email || expertKey,
+      adviceId: expert?.adviceId || `ADVICE_${String(expertKey).replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}_1`,
+      rating: draft.rating,
+      feedbackText: draft.comment.trim() || "No additional comments.",
+    };
+
+    try {
+      const response = await axios.post(
+        `${BACKEND_API.replace(/\/$/, "")}/expert-feedback`,
+        payload
+      );
+
+      const newFeedback = {
+        id: response?.data?.data?._id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        adviceId: payload.adviceId,
+        expertId: payload.expertId,
+        userId: payload.userId,
+        rating: payload.rating,
+        comment: payload.feedbackText,
+      };
+
+      setSelectedExpertDetail((prev: any) => ({
+        ...prev,
+        feedbacks: [...(prev?.feedbacks || []), newFeedback],
+      }));
+
+      setExpertFeedbackDrafts((prev) => ({
+        ...prev,
+        [expertKey]: { rating: 0, comment: "" },
+      }));
+
+      Alert.alert("Feedback submitted", "Your feedback was sent successfully.");
+    } catch (error: any) {
+      console.log("Expert feedback submit error:", error);
+      Alert.alert(
+        "Unable to submit feedback",
+        "Please check the Python backend connection or try again later."
+      );
+    }
+  };
+
   const renderMessageItem = useCallback(({ item }: { item: MessageItem }) => {
     const getCoordinates = (entry: any) => {
       const location = entry?.location;
@@ -499,7 +632,12 @@ const ChatScreen = () => {
                 const { latitude, longitude } = getCoordinates(expert);
 
                 return (
-                  <View key={`${item.id}-expert-${index}`} className="bg-white rounded-2xl border border-gray-200 p-4 mb-3">
+                  <TouchableOpacity
+                    key={`${item.id}-expert-${index}`}
+                    className="bg-white rounded-2xl border border-gray-200 p-4 mb-3"
+                    activeOpacity={0.9}
+                    onPress={() => setSelectedExpertDetail(expert)}
+                  >
                     <View className="flex-row items-start">
                       {expertPhoto ? (
                         <Image source={{ uri: expertPhoto }} className="w-16 h-16 rounded-full mr-3" />
@@ -523,6 +661,15 @@ const ChatScreen = () => {
 
                     <View className="flex-row mt-4">
                       <TouchableOpacity
+                        className="flex-1 bg-blue-600 rounded-xl py-2.5 mr-2"
+                        onPress={() => setSelectedExpertDetail(expert)}
+                      >
+                        <Text className="text-white text-center font-semibold">View Details</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View className="flex-row mt-2">
+                      <TouchableOpacity
                         className="flex-1 bg-green-600 rounded-xl py-2.5 mr-2"
                         onPress={() => openGoogleMaps(latitude, longitude)}
                       >
@@ -535,7 +682,7 @@ const ChatScreen = () => {
                         <Text className="text-white text-center font-semibold">📞 Call</Text>
                       </TouchableOpacity>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               }
 
@@ -736,6 +883,153 @@ const ChatScreen = () => {
             ))}
           </Pressable>
         </Pressable>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={Boolean(selectedExpertDetail)}
+        onRequestClose={() => setSelectedExpertDetail(null)}
+      >
+        <View className="flex-1 bg-black/40 justify-center px-4">
+          <View className="bg-white rounded-3xl max-h-[85%] p-4">
+            {selectedExpertDetail ? (
+              <>
+                <View className="flex-row items-center justify-between mb-4">
+                  <Text className="text-xl font-bold text-gray-900">Expert Details</Text>
+                  <TouchableOpacity onPress={() => setSelectedExpertDetail(null)}>
+                    <Ionicons name="close" size={24} color="#374151" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View className="items-center mb-4">
+                    {selectedExpertDetail?.photo || selectedExpertDetail?.image || selectedExpertDetail?.imageUrl ? (
+                      <Image
+                        source={{ uri: selectedExpertDetail.photo || selectedExpertDetail.image || selectedExpertDetail.imageUrl }}
+                        className="w-24 h-24 rounded-full"
+                      />
+                    ) : (
+                      <View className="w-24 h-24 rounded-full bg-green-100 items-center justify-center">
+                        <Ionicons name="person" size={36} color="#16A34A" />
+                      </View>
+                    )}
+                  </View>
+
+                  <Text className="text-2xl font-bold text-gray-900 text-center mb-2">
+                    {selectedExpertDetail?.name || selectedExpertDetail?.expertName || "Agro Expert"}
+                  </Text>
+
+                  <Text className="text-base text-green-700 text-center mb-3">
+                    {selectedExpertDetail?.cropSpecialization || selectedExpertDetail?.specialization || selectedExpertDetail?.crop || "Agriculture"}
+                  </Text>
+
+                  <View className="bg-gray-50 rounded-2xl p-3 mb-4">
+                    <Text className="text-sm text-gray-700">📞 {selectedExpertDetail?.phoneNumber || selectedExpertDetail?.phone || selectedExpertDetail?.contactNumber || selectedExpertDetail?.mobile || "—"}</Text>
+                    <Text className="text-sm text-gray-700 mt-1">📍 {selectedExpertDetail?.address || [selectedExpertDetail?.state, selectedExpertDetail?.district, selectedExpertDetail?.taluka, selectedExpertDetail?.place].filter(Boolean).join(", ") || "—"}</Text>
+                    <Text className="text-sm text-gray-700 mt-1">🧭 Distance: {selectedExpertDetail?.distance || selectedExpertDetail?.distanceKm || selectedExpertDetail?.distanceFromUser || "—"}</Text>
+                    <Text className="text-sm text-gray-700 mt-1">⭐ Experience: {selectedExpertDetail?.experienceYears || selectedExpertDetail?.experience || selectedExpertDetail?.yearsOfExperience || "—"} years</Text>
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className="text-base font-semibold text-gray-900 mb-2">Feedback Summary</Text>
+
+                    <View className="bg-green-50 rounded-2xl p-3">
+                      <Text className="text-sm text-gray-700">
+                        {selectedExpertFeedbackSummary.totalRatings > 0
+                          ? `${selectedExpertFeedbackSummary.average.toFixed(1)} / 5 average rating from ${selectedExpertFeedbackSummary.totalRatings} review(s)`
+                          : "No ratings yet for this expert."}
+                      </Text>
+                    </View>
+
+                    {selectedExpertFeedbackSummary.totalRatings > 0 ? (
+                      <View className="mt-3">
+                        {Array.from({ length: 5 }, (_, starIndex) => {
+                          const starValue = 5 - starIndex;
+                          const count = selectedExpertFeedbackSummary.distribution[starValue as keyof typeof selectedExpertFeedbackSummary.distribution];
+                          const percentage = (count / selectedExpertFeedbackSummary.totalRatings) * 100;
+
+                          return (
+                            <View key={starValue} className="flex-row items-center mt-1">
+                              <Text className="w-9 text-xs text-gray-600">{starValue}★</Text>
+                              <View className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                                <View className="h-full rounded-full bg-green-500" style={{ width: `${percentage}%` }} />
+                              </View>
+                              <Text className="ml-2 w-8 text-right text-xs text-gray-600">{count}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className="text-base font-semibold text-gray-900 mb-2">Recent Feedback</Text>
+
+                    {(selectedExpertDetail?.feedbacks || []).length > 0 ? (
+                      (selectedExpertDetail.feedbacks || []).slice(-3).map((feedback: any, feedbackIndex: number) => (
+                        <View key={`${feedback.id || feedback.adviceId || "feedback"}-${feedbackIndex}`} className="bg-gray-50 rounded-2xl p-3 mb-2">
+                          <View className="flex-row items-center mb-1">
+                            {Array.from({ length: 5 }, (_, starIndex) => (
+                              <Ionicons
+                                key={starIndex}
+                                name={feedback.rating > starIndex ? "star" : "star-outline"}
+                                size={16}
+                                color={feedback.rating > starIndex ? "#F59E0B" : "#9CA3AF"}
+                              />
+                            ))}
+                          </View>
+                          <Text className="text-sm text-gray-700">{feedback.comment || feedback.feedbackText || "No comments."}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text className="text-sm text-gray-500">No feedback available yet.</Text>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className="text-base font-semibold text-gray-900 mb-2">Rate This Expert</Text>
+
+                    <View className="flex-row mb-3">
+                      {Array.from({ length: 5 }, (_, starIndex) => {
+                        const starValue = starIndex + 1;
+                        return (
+                          <TouchableOpacity
+                            key={starValue}
+                            onPress={() => updateExpertFeedbackDraft(selectedExpertDetailKey, "rating", starValue)}
+                            className="mr-1"
+                          >
+                            <Ionicons
+                              name={selectedExpertDraft.rating >= starValue ? "star" : "star-outline"}
+                              size={28}
+                              color={selectedExpertDraft.rating >= starValue ? "#F59E0B" : "#9CA3AF"}
+                            />
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <TextInput
+                      className="border border-gray-300 rounded-2xl px-3 py-3 text-gray-800 mb-3"
+                      multiline
+                      numberOfLines={4}
+                      placeholder="Write your feedback here..."
+                      value={selectedExpertDraft.comment}
+                      onChangeText={(text) => updateExpertFeedbackDraft(selectedExpertDetailKey, "comment", text)}
+                    />
+
+                    <TouchableOpacity
+                      className="bg-green-600 rounded-2xl py-3"
+                      onPress={() => submitExpertFeedback(selectedExpertDetail)}
+                    >
+                      <Text className="text-white text-center font-semibold">Submit Feedback</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        </View>
       </Modal>
 
       {/* Left sidebar - chat history */}

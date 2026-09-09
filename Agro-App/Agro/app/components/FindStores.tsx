@@ -41,6 +41,7 @@ interface Store {
   openingTime?: string;
   closingTime?: string;
   description?: string;
+  isActive?: boolean;
   products?: StoreProduct[];
 }
 
@@ -110,7 +111,9 @@ export default function FindStores() {
         ? res.data
         : res.data?.data || res.data?.stores || [];
 
-      setStores(data);
+      const activeStores = data.filter((store: Store) => store.isActive !== false);
+
+      setStores(activeStores);
     } catch (err) {
       Alert.alert("Unable to fetch stores.");
       console.log(err);

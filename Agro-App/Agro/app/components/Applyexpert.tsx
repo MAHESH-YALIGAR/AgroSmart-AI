@@ -64,6 +64,7 @@ export default function Applyexpert() {
   const [selectedCrops, setSelectedCrops] = useState<string[]>([]);
   const [cropSearch, setCropSearch] = useState("");
   const [showCropOptions, setShowCropOptions] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const states = locationData.states;
 
@@ -124,8 +125,67 @@ export default function Applyexpert() {
     }
   };
 
-  const handleSave = () => {
-    Alert.alert("Frontend Ready", "The expert form UI is prepared. No backend logic was added.");
+  const handleSave = async () => {
+    if (
+      !form.fullName.trim() ||
+      !form.phoneNumber.trim() ||
+      !form.email.trim() ||
+      selectedCrops.length === 0 ||
+      !form.state ||
+      !form.district ||
+      !form.taluka ||
+      !form.place ||
+      !form.experience.trim()
+    ) {
+      Alert.alert("Missing details", "Please fill in all required expert details before applying.");
+      return;
+    }
+
+    const backendUrl = process.env.EXPO_PUBLIC_BACKEND_API || "http://localhost:9008";
+
+    try {
+      setIsSubmitting(true);
+
+      const payload = {
+        photo: form.profilePhoto || null,
+        name: form.fullName.trim(),
+        phone: form.phoneNumber.trim(),
+        email: form.email.trim(),
+        crop: selectedCrops.join(", "),
+        state: form.state,
+        district: form.district,
+        taluka: form.taluka,
+        place: form.place,
+        experience: Number(form.experience) || 0,
+        description: form.description.trim(),
+        aadhaarNumber: form.aadhaarNumber.trim(),
+        verificationStatus: form.verificationStatus,
+        aadhaarFileName: form.aadhaarFileName.trim(),
+        certificateFileName: form.certificateFileName.trim(),
+      };
+
+      const response = await fetch(`${backendUrl}/api/v1/webrouter/createExpertRequest`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Failed to submit expert request.");
+      }
+
+      Alert.alert("Success", "Your expert request has been submitted successfully.");
+      handleReset();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Something went wrong while submitting your expert request.";
+      Alert.alert("Submission failed", message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -449,9 +509,12 @@ export default function Applyexpert() {
         <View className="mt-6 flex-row gap-3">
           <TouchableOpacity
             onPress={handleSave}
-            className="mr-2 flex-1 rounded-xl bg-green-700 px-4 py-3"
+            disabled={isSubmitting}
+            className={`mr-2 flex-1 rounded-xl px-4 py-3 ${isSubmitting ? "bg-green-400" : "bg-green-700"}`}
           >
-            <Text className="text-center font-bold text-white">Save Expert</Text>
+            <Text className="text-center font-bold text-white">
+              {isSubmitting ? "Submitting..." : "Save Expert"}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity

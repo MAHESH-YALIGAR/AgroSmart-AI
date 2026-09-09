@@ -1,4 +1,5 @@
 
+const mongoose = require("mongoose");
 const Expert = require("../models/expert.model");
 const Stores = require("../models/agrostore.model");
 const AgricultureScheme =require("../models/shemas.model");
@@ -36,11 +37,9 @@ module.exports.govtgetexpert = async (req, res) => {
       place
     } = req.body || {};
 
-    // Default query
-    // If no filters are provided, this returns all active experts
-    const query = {
-      isActive: true
-    };
+    // Management should show all experts, including blocked ones,
+    // so admins can unblock them after a refresh.
+    const query = {};
 
     // Add filters only when values are provided
     if (state && state.trim() !== "") {
@@ -60,11 +59,71 @@ module.exports.govtgetexpert = async (req, res) => {
     }
 
     const experts = await Expert.find(query);
-console.log("backend experts",experts)
+
+    // A duplicate expert entry can exist for the same email if the record was added
+    // more than once. Keep only the most recently updated document per email.
+    const dedupedExperts = new Map();
+
+    experts.forEach((expert) => {
+      const email = (expert.email || "").toLowerCase();
+
+      if (!email) {
+        return;
+      }
+
+      const existing = dedupedExperts.get(email);
+
+      if (!existing) {
+        dedupedExperts.set(email, expert);
+        return;
+      }
+
+      const existingScore = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+      const expertScore = new Date(expert.updatedAt || expert.createdAt || 0).getTime();
+      const existingCreatedAt = new Date(existing.createdAt || 0).getTime();
+      const expertCreatedAt = new Date(expert.createdAt || 0).getTime();
+
+      if (
+        expertScore > existingScore ||
+        (expertScore === existingScore && expertCreatedAt > existingCreatedAt)
+      ) {
+        dedupedExperts.set(email, expert);
+      }
+    });
+
+    const uniqueExperts = Array.from(dedupedExperts.values()).sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime();
+      const bTime = new Date(b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
+
+    const primaryExpertIdByEmail = new Map(
+      uniqueExperts.map((expert) => [
+        (expert.email || "").toLowerCase(),
+        expert._id.toString(),
+      ])
+    );
+
+    const feedbackCollection = mongoose.connection.collection("expert_feedbacks");
+
+    for (const expert of experts) {
+      const email = (expert.email || "").toLowerCase();
+      const currentPrimaryId = primaryExpertIdByEmail.get(email);
+
+      if (!email || !currentPrimaryId || currentPrimaryId === expert._id.toString()) {
+        continue;
+      }
+
+      await feedbackCollection.updateMany(
+        { expertId: expert._id.toString() },
+        { $set: { expertId: currentPrimaryId } }
+      );
+    }
+
     return res.status(200).json({
       success: true,
-      count: experts.length,
-      experts: experts
+      count: uniqueExperts.length,
+      experts: uniqueExperts
     });
 
   } catch (error) {
@@ -265,16 +324,14 @@ module.exports.getallschemaforuser = async (req, res) => {
 };
 
 module.exports.deleteexpert = async (req, res) => {
-  // Add curly braces around email here to extract the string value!
-  const { email } = req.body; 
-  console.log("expert email for the delete:", email); // Should print: yaligarmahesh47@gmail.com
+  const { email } = req.body;
+  console.log("expert email for the delete:", email);
 
   try {
-    // This will now pass { email: "yaligarmahesh47@gmail.com" } to MongoDB
-    const schemas = await expertModel.deleteOne({ email });
-    console.log("need to delete schema", schemas);
+    const result = await expertModel.deleteMany({ email });
+    console.log("deleted expert records", result);
 
-    if (schemas.deletedCount === 0) {
+    if (result.deletedCount === 0) {
       return res.status(404).json({ message: "Expert not found in database" });
     }
 
@@ -291,27 +348,29 @@ module.exports.toggleBlockExpert = async (req, res) => {
   console.log("expert email for active status toggle:", email);
 
   try {
-    // 1. Find the expert using their email
-    const expert = await expertModel.findOne({ email });
+    const experts = await expertModel.find({ email });
 
-    if (!expert) {
+    if (!experts.length) {
       return res.status(404).json({ message: "Expert not found in database" });
     }
 
-    // 2. Toggle the boolean value (true becomes false, false becomes true)
-    expert.isActive = !expert.isActive;
-    await expert.save();
+    const nextStatus = !experts[0].isActive;
 
-    console.log("Expert updated status. isActive is now:", expert.isActive);
+    const updateResult = await expertModel.updateMany(
+      { email },
+      { $set: { isActive: nextStatus } }
+    );
 
-    // 3. Set a smart message based on the new boolean state
-    const statusMessage = expert.isActive 
-      ? "Expert unblocked (Activated) successfully" 
+    console.log("Expert updateMany result:", updateResult);
+
+    const statusMessage = nextStatus
+      ? "Expert unblocked (Activated) successfully"
       : "Expert blocked (Deactivated) successfully";
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       message: statusMessage,
-      isActive: expert.isActive // Send this back so the React UI knows what changed
+      isActive: nextStatus,
+      updatedCount: updateResult.modifiedCount || updateResult.nModified || 0,
     });
 
   } catch (error) {
