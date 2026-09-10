@@ -20,6 +20,7 @@ import {
   Alert,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { Audio } from "expo-av";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { speakText, stopSpeech } from "../../services/textToSpeech";
 const BACKEND_API = process.env.EXPO_PUBLIC_PYTHON_BACKEND_API || "http://192.168.244.122:8000";
@@ -148,18 +149,51 @@ const ChatScreen = () => {
   const [userid, setUserid] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
+  const [isListening, setIsListening] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   const [selectedExpertDetail, setSelectedExpertDetail] = useState<any | null>(null);
   const [expertFeedbackDrafts, setExpertFeedbackDrafts] = useState<
     Record<string, { rating: number; comment: string }>
   >({});
   const activeSpeechMessageIdRef = useRef<string | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const listeningPulse = useRef(new Animated.Value(1)).current;
 
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   const { user } = useContext(UserContext);
 
   const languages = ["Kannada", "English", "Hindi", "Tamil", "Telugu", "Malayalam", "Marathi"];
+
+  useEffect(() => {
+    if (!isListening) {
+      listeningPulse.stopAnimation();
+      listeningPulse.setValue(1);
+      return;
+    }
+
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(listeningPulse, {
+          toValue: 1.18,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(listeningPulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    pulseAnimation.start();
+
+    return () => {
+      pulseAnimation.stop();
+      listeningPulse.setValue(1);
+    };
+  }, [isListening, listeningPulse]);
 
   const handleAssistantSpeech = useCallback((messageId: string, text: string) => {
     if (!text || !text.trim()) {
@@ -189,6 +223,100 @@ const ChatScreen = () => {
         activeSpeechMessageIdRef.current = null;
       },
     });
+  }, [selectedLanguage]);
+
+  const handleVoiceInput = useCallback(async () => {
+    if (recordingRef.current) {
+      const recording = recordingRef.current;
+      recordingRef.current = null;
+      setIsListening(false);
+
+      try {
+        await recording.stopAndUnloadAsync();
+        const recordingUri = recording.getURI();
+
+        if (!recordingUri) {
+          throw new Error("The recording did not produce an audio file.");
+        }
+
+        const transcriptionUrl = process.env.EXPO_PUBLIC_SPEECH_TO_TEXT_API_URL ||
+          "https://api.openai.com/v1/audio/transcriptions";
+        const transcriptionApiKey = process.env.EXPO_PUBLIC_SPEECH_TO_TEXT_API_KEY;
+
+        if (!transcriptionApiKey) {
+          Alert.alert(
+            "Voice input setup needed",
+            "Add EXPO_PUBLIC_SPEECH_TO_TEXT_API_KEY to .env and restart Expo."
+          );
+          return;
+        }
+
+        const formData = new FormData();
+        // @ts-ignore React Native FormData accepts a native file descriptor.
+        formData.append("file", {
+          uri: recordingUri,
+          name: "voice-input.m4a",
+          type: "audio/mp4",
+        });
+        formData.append("model", "whisper-1");
+        formData.append("language", selectedLanguage === "Kannada" ? "kn" : "en");
+
+        const response = await fetch(transcriptionUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${transcriptionApiKey}` },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error((await response.text()) || `Transcription failed (${response.status}).`);
+        }
+
+        const transcription = await response.json();
+        const transcript = String(transcription?.text || "").trim();
+
+        if (!transcript) {
+          Alert.alert("Voice input", "No speech was detected. Please try again.");
+          return;
+        }
+
+        setMessage((currentText) => {
+          const currentTrimmed = currentText.trim();
+          return currentTrimmed ? `${currentTrimmed} ${transcript}` : transcript;
+        });
+      } catch (error: any) {
+        console.log("Voice transcription error:", error);
+        Alert.alert("Voice input", error?.message || "Could not convert the recording to text.");
+      } finally {
+        try {
+          await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+        } catch {
+          // ignore audio mode cleanup errors
+        }
+      }
+
+      return;
+    }
+
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert("Microphone permission needed", "Please allow microphone access to record your voice.");
+        return;
+      }
+
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+      recordingRef.current = recording;
+      setIsListening(true);
+    } catch (error: any) {
+      console.log("Voice recording start error:", error);
+      recordingRef.current = null;
+      setIsListening(false);
+      Alert.alert("Voice input", error?.message || "Could not start recording. Please try again.");
+    }
   }, [selectedLanguage]);
 
   const handleLanguageSelect = (language: string) => {
@@ -261,6 +389,15 @@ const ChatScreen = () => {
       useNativeDriver: true,
     }).start();
   }, [sidebarOpen, slideAnim]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => undefined);
+        recordingRef.current = null;
+      }
+    };
+  }, []);
 
   const openSidebar = useCallback(() => setSidebarOpen(true), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -832,9 +969,29 @@ const ChatScreen = () => {
               <TouchableOpacity className="mr-4" activeOpacity={0.8} onPress={() => setLanguageModalVisible(true)}>
                 <MaterialIcons name="translate" size={26} color="#16A34A" />
               </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8}>
-                <MaterialIcons name="keyboard-voice" size={28} color="#16A34A" />
-              </TouchableOpacity>
+              <View className="flex-row items-center mr-4">
+                <Animated.View
+                  style={{
+                    transform: [{ scale: listeningPulse }],
+                    opacity: isListening ? 1 : 0.9,
+                  }}
+                >
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={handleVoiceInput}
+                    className={isListening ? "rounded-full bg-green-100 p-1" : "p-1"}
+                  >
+                    <MaterialIcons
+                      name="keyboard-voice"
+                      size={28}
+                      color={isListening ? "#059669" : "#16A34A"}
+                    />
+                  </TouchableOpacity>
+                </Animated.View>
+                {isListening ? (
+                  <Text className="ml-2 text-xs font-semibold text-green-700">Listening...</Text>
+                ) : null}
+              </View>
             </View>
 
             <View className="flex-row items-center">
