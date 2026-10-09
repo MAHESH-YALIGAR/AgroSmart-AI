@@ -359,8 +359,8 @@ const handleDelete = async (email: string) => {
               className={`bg-white rounded-2xl shadow-sm border overflow-hidden
                 ${
                 expert.isActive
-                  ? "opacity-60 border-red-300"
-                  : "border-gray-200"
+                  ? "border-gray-200"
+                  : "opacity-60 border-red-300"
               }`}
             >
 

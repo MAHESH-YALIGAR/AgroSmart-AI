@@ -7,36 +7,14 @@ import {
   MaterialIcons,
   Ionicons,
 } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, {
-  useEffect,
-  useState,
-} from "react";
+import React from "react";
 
 export default function HomeHeader({
   user,
+  locationAddress,
+  locationError,
   onPress,
 }: any) {
-  // 1. Keep state as a string or null
-  const [address, setAddress] = useState<string | null>(null);
-
-  useEffect(() => {
-    getAddress();
-  }, []);
-
-  const getAddress = async () => {
-    try {
-      const savedAddress = await AsyncStorage.getItem("user_address");
-      
-      if (savedAddress) {
-        // 2. Set the raw string directly (No JSON.parse needed)
-        setAddress(savedAddress);
-      }
-    } catch (error) {
-      console.log("❌ Error reading address:", error);
-    }
-  };
-
   return (
     <View
       className="
@@ -86,7 +64,7 @@ export default function HomeHeader({
 
             {/* 3. Render the string variable directly */}
             <Text className="text-gray-500 text-xs ml-1">
-              {address ? address : "Fetching location..."}
+              {locationAddress || locationError || "Fetching location..."}
             </Text>
           </View>
         </View>

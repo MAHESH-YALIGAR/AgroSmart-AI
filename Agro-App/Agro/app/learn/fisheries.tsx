@@ -4,8 +4,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
+import LanguageDropdown, { type LearningLanguage } from "./LanguageDropdown";
+import { getLearningUi } from "../../utils/learningTranslations";
+import { useTranslatedContent } from "../../utils/translatedContent";
 
-type Language = "en" | "kn";
 type FishKey = "composite" | "tilapia" | "pangasius" | "prawn" | "ornamental";
 
 type FishOption = {
@@ -185,10 +187,13 @@ const baseSources = [
 
 export default function FisheriesScreen() {
   const router = useRouter();
-  const [language, setLanguage] = useState<Language>("en");
+  const [language, setLanguage] = useState<LearningLanguage>("en");
   const [selected, setSelected] = useState<FishKey>("composite");
-  const option = fishOptions.find((item) => item.key === selected) ?? fishOptions[0];
+  const translatedFishOptions = useTranslatedContent(fishOptions, language);
+  const translatedSources = useTranslatedContent(baseSources, language);
+  const option = translatedFishOptions.find((item) => item.key === selected) ?? translatedFishOptions[0];
   const isKannada = language === "kn";
+  const ui = getLearningUi(language);
   const videoUrl = isKannada
     ? "https://www.youtube.com/results?search_query=Kannada+fish+farming+Karnataka"
     : "https://www.youtube.com/results?search_query=scientific+fish+farming+India";
@@ -226,18 +231,18 @@ export default function FisheriesScreen() {
         </View>
 
         <View className="px-5 pt-5">
-          <View className="flex-row items-center justify-between"><Text className="text-base font-bold text-gray-800">{isKannada ? "ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ" : "Choose language"}</Text><View className="flex-row rounded-xl bg-gray-200 p-1"><Pressable onPress={() => setLanguage("en")} className={`rounded-lg px-4 py-2 ${!isKannada ? "bg-white" : ""}`}><Text className={`text-sm font-bold ${!isKannada ? "text-cyan-800" : "text-gray-500"}`}>English</Text></Pressable><Pressable onPress={() => setLanguage("kn")} className={`rounded-lg px-4 py-2 ${isKannada ? "bg-white" : ""}`}><Text className={`text-sm font-bold ${isKannada ? "text-cyan-800" : "text-gray-500"}`}>ಕನ್ನಡ</Text></Pressable></View></View>
-          <Text className="mt-7 text-xl font-bold text-gray-900">{isKannada ? "ಮೀನು ಆಯ್ಕೆ ಮಾಡಿ" : "Select a fish enterprise"}</Text>
-          <Text className="mt-1 text-sm text-gray-500">{isKannada ? "ನಿಮ್ಮ ಕೊಳ, ನೀರು ಮತ್ತು ಮಾರುಕಟ್ಟೆಗೆ ತಕ್ಕಂತೆ" : "Match the option to your pond, water, and market"}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 -mr-5">{fishOptions.map((item) => { const active = item.key === selected; return <Pressable key={item.key} onPress={() => setSelected(item.key)} className={`mr-3 min-w-[124px] rounded-2xl border p-3 ${active ? "border-cyan-800 bg-cyan-800" : "border-transparent"}`} style={!active ? { backgroundColor: item.color } : undefined}><MaterialCommunityIcons name={item.icon} size={26} color={active ? "white" : "#0E7490"} /><Text className={`mt-2 text-sm font-bold ${active ? "text-white" : "text-gray-800"}`}>{isKannada ? item.kannada : item.name}</Text></Pressable>; })}</ScrollView>
+          <View className="flex-row items-center justify-between"><Text className="text-base font-bold text-gray-800">{ui.chooseLanguage}</Text><LanguageDropdown value={language} onChange={setLanguage} accentColor="#0E7490" /></View>
+          <Text className="mt-7 text-xl font-bold text-gray-900">{ui.selectFish}</Text>
+          <Text className="mt-1 text-sm text-gray-500">{ui.matchFish}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 -mr-5">{translatedFishOptions.map((item) => { const active = item.key === selected; return <Pressable key={item.key} onPress={() => setSelected(item.key)} className={`mr-3 min-w-[124px] rounded-2xl border p-3 ${active ? "border-cyan-800 bg-cyan-800" : "border-transparent"}`} style={!active ? { backgroundColor: item.color } : undefined}><MaterialCommunityIcons name={item.icon} size={26} color={active ? "white" : "#0E7490"} /><Text className={`mt-2 text-sm font-bold ${active ? "text-white" : "text-gray-800"}`}>{isKannada ? item.kannada : item.name}</Text></Pressable>; })}</ScrollView>
 
-          <View className="mt-6 rounded-3xl bg-white p-5 shadow-sm"><View className="flex-row items-center"><View className="h-14 w-14 items-center justify-center rounded-2xl bg-cyan-100"><MaterialCommunityIcons name={option.icon} size={31} color="#0E7490" /></View><View className="ml-4 flex-1"><Text className="text-2xl font-bold text-gray-900">{isKannada ? option.kannada : option.name}</Text><Text className="mt-1 text-xs font-semibold uppercase tracking-wide text-cyan-700">{isKannada ? "ಮೀನು ಮಾರ್ಗದರ್ಶಿ" : "Enterprise guide"}</Text></View></View><Text className="mt-5 text-sm leading-6 text-gray-600">{isKannada ? option.kannadaSummary : option.summary}</Text>
+          <View className="mt-6 rounded-3xl bg-white p-5 shadow-sm"><View className="flex-row items-center"><View className="h-14 w-14 items-center justify-center rounded-2xl bg-cyan-100"><MaterialCommunityIcons name={option.icon} size={31} color="#0E7490" /></View><View className="ml-4 flex-1"><Text className="text-2xl font-bold text-gray-900">{isKannada ? option.kannada : option.name}</Text><Text className="mt-1 text-xs font-semibold uppercase tracking-wide text-cyan-700">{ui.enterpriseGuide}</Text></View></View><Text className="mt-5 text-sm leading-6 text-gray-600">{isKannada ? option.kannadaSummary : option.summary}</Text>
             <View className="mt-5 flex-row"><View className="mr-3 flex-1 rounded-2xl bg-orange-50 p-3"><MaterialCommunityIcons name="cash-minus" size={21} color="#C2410C" /><Text className="mt-2 text-xs font-bold uppercase text-orange-700">{isKannada ? "ವೆಚ್ಚ" : "Cost"}</Text><Text className="mt-1 text-xs leading-4 text-orange-950">{isKannada ? option.kannadaCost : option.cost}</Text></View><View className="ml-1 flex-1 rounded-2xl bg-emerald-50 p-3"><MaterialCommunityIcons name="chart-line" size={21} color="#047857" /><Text className="mt-2 text-xs font-bold uppercase text-emerald-700">{isKannada ? "ಲಾಭ" : "Profit"}</Text><Text className="mt-1 text-xs leading-4 text-emerald-950">{isKannada ? option.kannadaProfit : option.profit}</Text></View></View>
             <Text className="mt-6 text-lg font-bold text-gray-900">{isKannada ? "ಸಾಕಾಣಿಕೆ ಹಂತಗಳು" : "Farming steps"}</Text><View className="mt-3">{(isKannada ? option.kannadaSteps : option.steps).map((step, index) => <View key={step} className="mb-4 flex-row"><View className="mr-3 h-7 w-7 items-center justify-center rounded-full bg-cyan-100"><Text className="text-sm font-bold text-cyan-800">{index + 1}</Text></View><Text className="flex-1 text-sm leading-5 text-gray-700">{step}</Text></View>)}</View>
           </View>
 
           <Text className="mt-7 text-xl font-bold text-gray-900">{isKannada ? "ವಿಶ್ವಾಸಾರ್ಹ ಮೂಲಗಳು" : "Trusted resources"}</Text><Text className="mt-1 text-sm text-gray-500">{isKannada ? "ಲೇಖನಗಳು ಮತ್ತು ಕನ್ನಡ ವಿಡಿಯೋ ಹುಡುಕಾಟ" : "Articles and language-matched video search"}</Text>
-          {sources.map((source) => <Pressable key={source.title} onPress={() => openSource(source.url)} className="mt-3 flex-row items-center rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"><View className="h-11 w-11 items-center justify-center rounded-xl bg-cyan-100"><MaterialCommunityIcons name={source.icon} size={23} color="#0E7490" /></View><View className="ml-3 flex-1"><View className="flex-row items-center"><Text className="mr-2 text-xs font-bold uppercase tracking-wide text-cyan-700">{isKannada ? (source.type === "Article" ? "ಲೇಖನ" : "ವಿಡಿಯೋ") : source.type}</Text><MaterialCommunityIcons name="shield-check-outline" size={14} color="#16A34A" /></View><Text className="mt-1 text-base font-bold text-gray-800">{isKannada ? source.kannadaTitle : source.title}</Text><Text className="mt-1 text-xs leading-4 text-gray-500">{isKannada ? source.kannadaSubtitle : source.subtitle}</Text></View><MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" /></Pressable>)}
+          {[...translatedSources, ...sources.slice(2)].map((source) => <Pressable key={source.title} onPress={() => openSource(source.url)} className="mt-3 flex-row items-center rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"><View className="h-11 w-11 items-center justify-center rounded-xl bg-cyan-100"><MaterialCommunityIcons name={source.icon} size={23} color="#0E7490" /></View><View className="ml-3 flex-1"><View className="flex-row items-center"><Text className="mr-2 text-xs font-bold uppercase tracking-wide text-cyan-700">{isKannada ? (source.type === "Article" ? "ಲೇಖನ" : "ವಿಡಿಯೋ") : source.type}</Text><MaterialCommunityIcons name="shield-check-outline" size={14} color="#16A34A" /></View><Text className="mt-1 text-base font-bold text-gray-800">{isKannada ? source.kannadaTitle : source.title}</Text><Text className="mt-1 text-xs leading-4 text-gray-500">{isKannada ? source.kannadaSubtitle : source.subtitle}</Text></View><MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" /></Pressable>)}
           <View className="mt-5 flex-row rounded-2xl bg-amber-50 p-4"><MaterialCommunityIcons name="information-outline" size={20} color="#A16207" /><Text className="ml-3 flex-1 text-xs leading-5 text-amber-900">{isKannada ? "ಇವು ಅಂದಾಜು ಲೆಕ್ಕಗಳು ಮಾತ್ರ. ನೀರು, ಆಹಾರ, ವಿದ್ಯುತ್, ಕಾರ್ಮಿಕ, ಸಾವು ಮತ್ತು ಮಾರುಕಟ್ಟೆ ಬೆಲೆಯನ್ನು ದಾಖಲಿಸಿ ನಿಜವಾದ ಲಾಭ ಲೆಕ್ಕಿಸಿ." : "These are indicative estimates only. Track water, feed, electricity, labour, mortality, and market price for your real profit."}</Text></View>
         </View>
       </ScrollView>

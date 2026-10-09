@@ -63,30 +63,30 @@ exports.createAgroStore = async (req, res) => {
  * @route  GET /api/agro-stores
  * @access Officer / AI service
  */
-exports.getAllAgroStores = async (req, res) => {
-  try {
-    const { state, district, taluka, place, search, page = 1, limit = 20 } = req.query;
+// exports.getAllAgroStores = async (req, res) => {
+//   try {
+//     const { state, district, taluka, place, search, page = 1, limit = 20 } = req.query;
 
-    const filter = { isActive: true };
-    if (state) filter.state = state;
-    if (district) filter.district = district;
-    if (taluka) filter.taluka = taluka;
-    if (place) filter.place = place;
-    if (search) filter.$text = { $search: search };
+//     const filter = { isActive: true };
+//     if (state) filter.state = state;
+//     if (district) filter.district = district;
+//     if (taluka) filter.taluka = taluka;
+//     if (place) filter.place = place;
+//     if (search) filter.$text = { $search: search };
 
-    const stores = await AgroStore.find(filter)
-      .populate("state district taluka place products.product")
-      .sort({ createdAt: -1 })
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit));
+//     const stores = await AgroStore.find(filter)
+//       .populate("state district taluka place products.product")
+//       .sort({ createdAt: -1 })
+//       .skip((Number(page) - 1) * Number(limit))
+//       .limit(Number(limit));
 
-    const total = await AgroStore.countDocuments(filter);
+//     const total = await AgroStore.countDocuments(filter);
 
-    res.status(200).json({ success: true, total, data: stores });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+//     res.status(200).json({ success: true, total, data: stores });
+//   } catch (error) {
+//     res.status(500).json({ success: false, message: error.message });
+//   }
+// };
 
 
 

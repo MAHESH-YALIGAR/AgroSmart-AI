@@ -1,32 +1,60 @@
 import React, { useState } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import {
+  Animated,
+  Modal,
+  Pressable,
   View,
   Text,
   TextInput,
   TouchableOpacity,
   ScrollView,
 } from "react-native";
-// import useRouter from 'expo-router';
 import { router } from "expo-router";
 import { Alert } from "react-native";
 import { useContext } from "react";
 import { UserContext } from "../context/UserContext";
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_API;
+type FaceLoginResult = "success" | "mismatch" | "error";
 
 export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState("");
-  const [faceImage, setFaceImage] = useState(null);
+  const [faceImage, setFaceImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [faceLoading, setFaceLoading] = useState(false);
+  const [faceResult, setFaceResult] = useState<FaceLoginResult | null>(null);
+  const [faceResultMessage, setFaceResultMessage] = useState("");
+  const [resultScale] = useState(() => new Animated.Value(0.82));
+  const [resultOpacity] = useState(() => new Animated.Value(0));
 
   const { loadProfile } =
     useContext(UserContext);
+
+  const showFaceResult = (result: FaceLoginResult, message: string) => {
+    setFaceResult(result);
+    setFaceResultMessage(message);
+    resultScale.setValue(0.82);
+    resultOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(resultScale, {
+        toValue: 1,
+        damping: 13,
+        stiffness: 170,
+        useNativeDriver: true,
+      }),
+      Animated.timing(resultOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
 
   const handleLogin = async () => {
@@ -50,6 +78,7 @@ export default function LoginScreen() {
         "token",
         response.data.token
       );
+      await loadProfile();
 
       Alert.alert("Success", "Login Successful");
 
@@ -91,12 +120,26 @@ export default function LoginScreen() {
         formData
       );
 
-      console.log(response.data);
-      router.replace("/(tabs)/Home");
-      Alert.alert(response)
+      if (response.data?.success !== true) {
+        showFaceResult(
+          "mismatch",
+          response.data?.message || "Sorry, we couldn't match this face. Please try again."
+        );
+        return;
+      }
+
+      await AsyncStorage.setItem("token", response.data.token);
+  await loadProfile();
+      showFaceResult(
+        "success",
+        `Face matched successfully${response.data.user?.name ? `, ${response.data.user.name}` : ""}. You're signed in and ready to continue.`
+      );
     } catch (error) {
-      console.log(error);
-      
+      const status = error instanceof AxiosError ? error.response?.status : undefined;
+      const message = status === 401
+        ? "Sorry, we couldn't match this face. Please try again or sign in with your password."
+        : "We couldn't verify your face right now. Please try again.";
+      showFaceResult(status === 401 ? "mismatch" : "error", message);
     } finally {
       setFaceLoading(false);
     }
@@ -138,6 +181,7 @@ export default function LoginScreen() {
     }
   };
   return (
+    <>
     <ScrollView className="flex-1 bg-white">
 
       {/* Image Placeholder */}
@@ -267,5 +311,76 @@ export default function LoginScreen() {
       </View>
 
     </ScrollView>
+    <Modal
+      transparent
+      visible={faceResult !== null}
+      animationType="fade"
+      onRequestClose={() => setFaceResult(null)}
+    >
+      <View className="flex-1 items-center justify-center bg-black/60 px-6">
+        <Animated.View
+          style={{ opacity: resultOpacity, transform: [{ scale: resultScale }] }}
+          className="w-full max-w-sm items-center rounded-[28px] bg-white px-7 pb-7 pt-8"
+        >
+          <View
+            className="mb-5 h-24 w-24 items-center justify-center rounded-full"
+            style={{
+              backgroundColor: faceResult === "success"
+                ? "#DCFCE7"
+                : faceResult === "mismatch"
+                  ? "#FFE4E6"
+                  : "#FEF3C7",
+            }}
+          >
+            <MaterialCommunityIcons
+              name={faceResult === "success"
+                ? "emoticon-happy-outline"
+                : faceResult === "mismatch"
+                  ? "emoticon-sad-outline"
+                  : "face-recognition"}
+              size={54}
+              color={faceResult === "success"
+                ? "#15803D"
+                : faceResult === "mismatch"
+                  ? "#E11D48"
+                  : "#B45309"}
+            />
+          </View>
+          <Text className="text-center text-2xl font-bold text-gray-900">
+            {faceResult === "success"
+              ? "Welcome back!"
+              : faceResult === "mismatch"
+                ? "Face not matched"
+                : "Couldn't verify your face"}
+          </Text>
+          <Text className="mt-3 text-center text-base leading-6 text-gray-600">
+            {faceResultMessage}
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => {
+              const isSuccess = faceResult === "success";
+              setFaceResult(null);
+              if (isSuccess) {
+                router.replace("/(tabs)/Home");
+              } else {
+                void openFaceCamera();
+              }
+            }}
+            className={`mt-7 w-full rounded-2xl py-4 ${faceResult === "success" ? "bg-green-700" : "bg-rose-600"}`}
+          >
+            <Text className="text-center text-base font-bold text-white">
+              {faceResult === "success" ? "Continue to AgroSmart" : "Try another photo"}
+            </Text>
+          </TouchableOpacity>
+          {faceResult !== "success" && (
+            <Pressable onPress={() => setFaceResult(null)} className="mt-4 px-4 py-2">
+              <Text className="font-semibold text-gray-500">Use password instead</Text>
+            </Pressable>
+          )}
+        </Animated.View>
+      </View>
+    </Modal>
+    </>
   );
 }

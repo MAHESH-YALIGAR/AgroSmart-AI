@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import axios from "axios";
+import { UserContext } from "../context/UserContext";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_API;
 
@@ -177,24 +178,36 @@ export default function Weather() {
   const [alert, setAlert] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { setLocationAddress, setLocationError } = useContext(UserContext);
 
-  useEffect(() => {
-    getLocation();
+  const getWeather = useCallback(async (latitude: number, longitude: number) => {
+    try {
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&hourly=precipitation_probability&daily=sunrise,sunset&timezone=auto`
+      );
+      const data = await response.json();
 
+      setWeather({
+        ...data.current,
+        rainProbability: data.hourly?.precipitation_probability?.[0] || 0,
+        sunrise: data.daily?.sunrise?.[0],
+        sunset: data.daily?.sunset?.[0],
+      });
+
+      return data;
+    } catch (error) {
+      console.log(error);
+    }
   }, []);
 
-  useEffect(() => {
-    if (weather && address) {
-      getWeatherAlert();
-    }
-  }, [weather, address]);
-
-  const getLocation = async () => {
+  const getLocation = useCallback(async () => {
     try {
+      setLocationError(null);
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
         setErrorMsg("Location permission denied");
+        setLocationError("Location permission denied");
         setLoading(false);
         return;
       }
@@ -219,43 +232,26 @@ export default function Weather() {
       setAddress(addressData[0]);
       const selectedAddress = addressData[0];
 
-      // Extract just the city string
-      const cityName = selectedAddress.city;
+      const cityName = selectedAddress?.city || selectedAddress?.subregion || selectedAddress?.region;
+      if (!cityName) {
+        throw new Error("No readable address found for this location");
+      }
 
-      // Save the raw string directly (no JSON.stringify needed)
-      await AsyncStorage.setItem('user_address', cityName);
+      setLocationAddress(cityName);
+      await AsyncStorage.setItem("user_address", cityName);
 
-      console.log('✅ Address saved to storage:', cityName);
+      console.log("Address saved to storage:", cityName);
 
     } catch (error) {
       console.log(error);
-      setErrorMsg("Couldn't fetch your location");
+      setErrorMsg("Could not fetch your location");
+      setLocationError("Couldn't fetch location");
     } finally {
       setLoading(false);
     }
-  };
+  }, [getWeather, setLocationAddress, setLocationError]);
 
-  const getWeather = async (latitude: number, longitude: number) => {
-    try {
-      const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&hourly=precipitation_probability&daily=sunrise,sunset&timezone=auto`
-      );
-      const data = await response.json();
-
-      setWeather({
-        ...data.current,
-        rainProbability: data.hourly?.precipitation_probability?.[0] || 0,
-        sunrise: data.daily?.sunrise?.[0],
-        sunset: data.daily?.sunset?.[0],
-      });
-
-      return data;
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const getWeatherAlert = async () => {
+  const getWeatherAlert = useCallback(async () => {
     try {
       const response = await axios.post(`${BACKEND_URL}/api/v1/weather/alert`, {
         temperature: weather.temperature_2m,
@@ -270,7 +266,22 @@ export default function Weather() {
     } catch (error: any) {
       console.log(error?.response?.data || error.message);
     }
-  };
+  }, [weather, address]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void getLocation();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [getLocation]);
+
+  useEffect(() => {
+    if (!weather || !address) return;
+    const timer = setTimeout(() => {
+      void getWeatherAlert();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [weather, address, getWeatherAlert]);
 
   return (
     <View
@@ -308,7 +319,7 @@ export default function Weather() {
             {/* Top label row */}
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={{ color: COLORS.textSecondary, fontSize: 13, letterSpacing: 1.4, fontWeight: "800" }}>
-                TODAY'S WEATHER
+                TODAY&apos;S WEATHER
               </Text>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Ionicons name="location-sharp" size={13} color={COLORS.textTertiary} />

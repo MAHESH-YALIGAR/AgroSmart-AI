@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -9,13 +9,12 @@ export const UserContext = createContext<any>(null);
 export const UserProvider = ({ children }: any) => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [locationAddress, setLocationAddress] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
   console.log("user from contex",user)
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("token");
 
@@ -44,7 +43,27 @@ export const UserProvider = ({ children }: any) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const profileTimer = setTimeout(() => {
+      void loadProfile();
+    }, 0);
+    const addressTimer = setTimeout(() => {
+      void AsyncStorage.getItem("user_address").then((savedAddress) => {
+        if (savedAddress) {
+          setLocationAddress((currentAddress) => currentAddress ?? savedAddress);
+        }
+      }).catch((error) => {
+        console.log("Saved location read error:", error);
+      });
+    }, 0);
+
+    return () => {
+      clearTimeout(profileTimer);
+      clearTimeout(addressTimer);
+    };
+  }, [loadProfile]);
 
   const logout = async () => {
     setLoading(true);
@@ -66,6 +85,10 @@ export const UserProvider = ({ children }: any) => {
         setUser,
         loading,
         loadProfile,
+        locationAddress,
+        setLocationAddress,
+        locationError,
+        setLocationError,
         logout,
       }}
     >

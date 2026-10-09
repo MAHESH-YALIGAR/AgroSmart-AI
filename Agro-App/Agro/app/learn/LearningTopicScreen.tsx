@@ -4,8 +4,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
+import LanguageDropdown, { type LearningLanguage } from "./LanguageDropdown";
+import { getLearningUi } from "../../utils/learningTranslations";
+import { useTranslatedContent } from "../../utils/translatedContent";
 
-type Language = "en" | "kn";
 type TopicKey = "beekeeping" | "organic-farming" | "modern-technology" | "business-market" | "agro-products";
 type TopicColor = "amber" | "emerald" | "indigo" | "rose" | "orange";
 
@@ -615,19 +617,21 @@ export default function LearningTopicScreen({ topicKey }: { topicKey: TopicKey }
   const topic = topics[topicKey];
   const colors = theme[topic.color];
   const router = useRouter();
-  const [language, setLanguage] = useState<Language>("en");
+  const [language, setLanguage] = useState<LearningLanguage>("en");
+  const translatedTopic = useTranslatedContent(topic, language);
   const [selectedKey, setSelectedKey] = useState(topic.options[0].key);
-  const selected = topic.options.find((item) => item.key === selectedKey) ?? topic.options[0];
+  const selected = translatedTopic.options.find((item) => item.key === selectedKey) ?? translatedTopic.options[0];
   const isKannada = language === "kn";
+  const ui = getLearningUi(language);
   const videoUrl = isKannada
     ? `https://www.youtube.com/results?search_query=Kannada+${encodeURIComponent(topic.kannadaTitle)}+Karnataka`
-    : `https://www.youtube.com/results?search_query=scientific+${encodeURIComponent(topic.title)}+India`;
+    : `https://www.youtube.com/results?search_query=scientific+${encodeURIComponent(translatedTopic.title)}+India`;
   const sources: Source[] = [
-    ...topic.sources,
+    ...translatedTopic.sources,
     {
       type: "Video",
       icon: "play-circle-outline",
-      title: `${topic.title} videos`,
+      title: `${translatedTopic.title} videos`,
       kannadaTitle: `ಕನ್ನಡ ${topic.kannadaTitle} ವಿಡಿಯೋಗಳು`,
       subtitle: "Practical video search for farmers",
       kannadaSubtitle: "ರೈತರಿಗೆ ಪ್ರಾಯೋಗಿಕ ಕನ್ನಡ ವಿಡಿಯೋ ಹುಡುಕಾಟ",
@@ -651,42 +655,39 @@ export default function LearningTopicScreen({ topicKey }: { topicKey: TopicKey }
               <MaterialCommunityIcons name="arrow-left" size={23} color="white" />
             </Pressable>
             <View className="flex-1 px-4">
-              <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{isKannada ? topic.kannadaEyebrow : topic.eyebrow}</Text>
-              <Text className="mt-1 text-2xl font-bold text-white">{isKannada ? topic.kannadaTitle : topic.title}</Text>
+              <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{isKannada ? translatedTopic.kannadaEyebrow : translatedTopic.eyebrow}</Text>
+              <Text className="mt-1 text-2xl font-bold text-white">{isKannada ? translatedTopic.kannadaTitle : translatedTopic.title}</Text>
             </View>
             <View className={`h-11 w-11 items-center justify-center rounded-full ${colors.button}`}><MaterialCommunityIcons name={topic.icon} size={25} color="white" /></View>
           </View>
-          <Text className="mt-5 text-sm leading-5 text-white/80">{isKannada ? topic.kannadaDescription : topic.description}</Text>
+          <Text className="mt-5 text-sm leading-5 text-white/80">{isKannada ? translatedTopic.kannadaDescription : translatedTopic.description}</Text>
         </View>
 
         <View className="px-5 pt-5">
           <View className="flex-row items-center justify-between">
-            <Text className="text-base font-bold text-gray-800">{isKannada ? "ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ" : "Choose language"}</Text>
-            <View className="flex-row rounded-xl bg-gray-200 p-1">
-              <Pressable onPress={() => setLanguage("en")} className={`rounded-lg px-4 py-2 ${!isKannada ? "bg-white" : ""}`}><Text className={`text-sm font-bold ${!isKannada ? colors.text : "text-gray-500"}`}>English</Text></Pressable>
-              <Pressable onPress={() => setLanguage("kn")} className={`rounded-lg px-4 py-2 ${isKannada ? "bg-white" : ""}`}><Text className={`text-sm font-bold ${isKannada ? colors.text : "text-gray-500"}`}>ಕನ್ನಡ</Text></Pressable>
-            </View>
+            <Text className="text-base font-bold text-gray-800">{ui.chooseLanguage}</Text>
+            <LanguageDropdown value={language} onChange={setLanguage} accentColor={colors.icon} />
           </View>
 
-          <Text className="mt-7 text-xl font-bold text-gray-900">{isKannada ? topic.kannadaSelectorTitle : topic.selectorTitle}</Text>
-          <Text className="mt-1 text-sm text-gray-500">{isKannada ? topic.kannadaSelectorHint : topic.selectorHint}</Text>
+          <Text className="mt-7 text-xl font-bold text-gray-900">{isKannada ? translatedTopic.kannadaSelectorTitle : translatedTopic.selectorTitle}</Text>
+          <Text className="mt-1 text-sm text-gray-500">{isKannada ? translatedTopic.kannadaSelectorHint : translatedTopic.selectorHint}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 -mr-5">
-            {topic.options.map((item) => {
+            {translatedTopic.options.map((item) => {
               const active = item.key === selectedKey;
               return <Pressable key={item.key} onPress={() => setSelectedKey(item.key)} className={`mr-3 min-w-[132px] rounded-2xl border p-3 ${active ? `${colors.border} ${colors.button}` : "border-transparent"}`} style={!active ? { backgroundColor: item.color } : undefined}><MaterialCommunityIcons name={item.icon} size={26} color={active ? "white" : colors.icon} /><Text className={`mt-2 text-sm font-bold ${active ? "text-white" : "text-gray-800"}`}>{isKannada ? item.kannada : item.name}</Text></Pressable>;
             })}
           </ScrollView>
 
           <View className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-            <View className="flex-row items-center"><View className={`h-14 w-14 items-center justify-center rounded-2xl ${colors.soft}`}><MaterialCommunityIcons name={selected.icon} size={31} color={colors.icon} /></View><View className="ml-4 flex-1"><Text className="text-2xl font-bold text-gray-900">{isKannada ? selected.kannada : selected.name}</Text><Text className={`mt-1 text-xs font-semibold uppercase tracking-wide ${colors.text}`}>{isKannada ? topic.kannadaOptionLabel : topic.optionLabel}</Text></View></View>
+            <View className="flex-row items-center"><View className={`h-14 w-14 items-center justify-center rounded-2xl ${colors.soft}`}><MaterialCommunityIcons name={selected.icon} size={31} color={colors.icon} /></View><View className="ml-4 flex-1"><Text className="text-2xl font-bold text-gray-900">{isKannada ? selected.kannada : selected.name}</Text><Text className={`mt-1 text-xs font-semibold uppercase tracking-wide ${colors.text}`}>{isKannada ? translatedTopic.kannadaOptionLabel : translatedTopic.optionLabel}</Text></View></View>
             <Text className="mt-5 text-sm leading-6 text-gray-600">{isKannada ? selected.kannadaSummary : selected.summary}</Text>
             <View className="mt-5 flex-row"><View className="mr-3 flex-1 rounded-2xl bg-orange-50 p-3"><MaterialCommunityIcons name="cash-minus" size={21} color="#C2410C" /><Text className="mt-2 text-xs font-bold uppercase text-orange-700">{isKannada ? "ವೆಚ್ಚ" : "Cost"}</Text><Text className="mt-1 text-xs leading-4 text-orange-950">{isKannada ? selected.kannadaCost : selected.cost}</Text></View><View className="ml-1 flex-1 rounded-2xl bg-emerald-50 p-3"><MaterialCommunityIcons name="chart-line" size={21} color="#047857" /><Text className="mt-2 text-xs font-bold uppercase text-emerald-700">{isKannada ? "ಆದಾಯ / ಉಳಿತಾಯ" : "Return / saving"}</Text><Text className="mt-1 text-xs leading-4 text-emerald-950">{isKannada ? selected.kannadaReturnLabel : selected.returnLabel}</Text></View></View>
-            <Text className="mt-6 text-lg font-bold text-gray-900">{isKannada ? "ಹಂತ ಹಂತದ ವಿಧಾನ" : "Step-by-step method"}</Text><View className="mt-3">{(isKannada ? selected.kannadaSteps : selected.steps).map((step, index) => <View key={step} className="mb-4 flex-row"><View className={`mr-3 h-7 w-7 items-center justify-center rounded-full ${colors.soft}`}><Text className={`text-sm font-bold ${colors.text}`}>{index + 1}</Text></View><Text className="flex-1 text-sm leading-5 text-gray-700">{step}</Text></View>)}</View>
+            <Text className="mt-6 text-lg font-bold text-gray-900">{ui.steps}</Text><View className="mt-3">{(isKannada ? selected.kannadaSteps : selected.steps).map((step, index) => <View key={step} className="mb-4 flex-row"><View className={`mr-3 h-7 w-7 items-center justify-center rounded-full ${colors.soft}`}><Text className={`text-sm font-bold ${colors.text}`}>{index + 1}</Text></View><Text className="flex-1 text-sm leading-5 text-gray-700">{step}</Text></View>)}</View>
           </View>
 
-          <View className={`mt-5 flex-row rounded-2xl ${colors.soft} p-4`}><MaterialCommunityIcons name="lightbulb-on-outline" size={21} color={colors.icon} /><View className="ml-3 flex-1"><Text className={`text-sm font-bold ${colors.text}`}>{isKannada ? topic.kannadaActionTitle : topic.actionTitle}</Text><Text className="mt-1 text-xs leading-5 text-gray-700">{isKannada ? topic.kannadaActionText : topic.actionText}</Text></View></View>
+          <View className={`mt-5 flex-row rounded-2xl ${colors.soft} p-4`}><MaterialCommunityIcons name="lightbulb-on-outline" size={21} color={colors.icon} /><View className="ml-3 flex-1"><Text className={`text-sm font-bold ${colors.text}`}>{isKannada ? translatedTopic.kannadaActionTitle : translatedTopic.actionTitle}</Text><Text className="mt-1 text-xs leading-5 text-gray-700">{isKannada ? translatedTopic.kannadaActionText : translatedTopic.actionText}</Text></View></View>
 
-          <Text className="mt-7 text-xl font-bold text-gray-900">{isKannada ? "ವಿಶ್ವಾಸಾರ್ಹ ಮೂಲಗಳು" : "Trusted resources"}</Text><Text className="mt-1 text-sm text-gray-500">{isKannada ? "ಲೇಖನ, ಸಾಧನ ಮತ್ತು ಕನ್ನಡ ವಿಡಿಯೋ ಹುಡುಕಾಟ" : "Articles, tools, and language-matched video search"}</Text>
+          <Text className="mt-7 text-xl font-bold text-gray-900">{ui.trustedResources}</Text><Text className="mt-1 text-sm text-gray-500">{isKannada ? "ಲೇಖನ, ಸಾಧನ ಮತ್ತು ಕನ್ನಡ ವಿಡಿಯೋ ಹುಡುಕಾಟ" : "Articles, tools, and language-matched video search"}</Text>
           {sources.map((source) => <Pressable key={source.title} onPress={() => openSource(source.url)} className="mt-3 flex-row items-center rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"><View className={`h-11 w-11 items-center justify-center rounded-xl ${colors.soft}`}><MaterialCommunityIcons name={source.icon} size={23} color={colors.icon} /></View><View className="ml-3 flex-1"><View className="flex-row items-center"><Text className={`mr-2 text-xs font-bold uppercase tracking-wide ${colors.text}`}>{isKannada ? (source.type === "Article" ? "ಲೇಖನ" : source.type === "Video" ? "ವಿಡಿಯೋ" : "ಸಾಧನ") : source.type}</Text><MaterialCommunityIcons name="shield-check-outline" size={14} color="#16A34A" /></View><Text className="mt-1 text-base font-bold text-gray-800">{isKannada ? source.kannadaTitle : source.title}</Text><Text className="mt-1 text-xs leading-4 text-gray-500">{isKannada ? source.kannadaSubtitle : source.subtitle}</Text></View><MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" /></Pressable>)}
           <View className="mt-5 flex-row rounded-2xl bg-amber-50 p-4"><MaterialCommunityIcons name="information-outline" size={20} color="#A16207" /><Text className="ml-3 flex-1 text-xs leading-5 text-amber-900">{isKannada ? "ಇವು ಅಂದಾಜು ಮಾಹಿತಿ ಮಾತ್ರ. ನಿಮ್ಮ ಸ್ಥಳೀಯ ಬೆಲೆ, ಕಾರ್ಮಿಕ, ವಿದ್ಯುತ್, ಒಳಹರಿವು ಮತ್ತು ಮಾರುಕಟ್ಟೆ ವೆಚ್ಚ ದಾಖಲಿಸಿ ನಿಜವಾದ ಲಾಭ ಲೆಕ್ಕಿಸಿ." : "These are indicative estimates only. Record your local prices, labour, electricity, inputs, and market costs to calculate real profit."}</Text></View>
         </View>

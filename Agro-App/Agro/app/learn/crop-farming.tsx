@@ -9,8 +9,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
+import LanguageDropdown, { type LearningLanguage } from "./LanguageDropdown";
+import { getLearningUi } from "../../utils/learningTranslations";
+import { useTranslatedContent } from "../../utils/translatedContent";
 
-type Language = "en" | "kn";
 type CropKey = "rice" | "wheat" | "maize" | "tomato" | "cotton" | "groundnut";
 
 type Crop = {
@@ -198,10 +200,13 @@ const sources = [
 
 export default function CropFarmingScreen() {
   const router = useRouter();
-  const [language, setLanguage] = useState<Language>("en");
+  const [language, setLanguage] = useState<LearningLanguage>("en");
   const [selectedCrop, setSelectedCrop] = useState<CropKey>("rice");
-  const crop = crops.find((item) => item.key === selectedCrop) ?? crops[0];
+  const translatedCrops = useTranslatedContent(crops, language);
+  const translatedSources = useTranslatedContent(sources, language);
+  const crop = translatedCrops.find((item) => item.key === selectedCrop) ?? translatedCrops[0];
   const isKannada = language === "kn";
+  const ui = getLearningUi(language);
 
   const openSource = async (url: string) => {
     await WebBrowser.openBrowserAsync(url, {
@@ -244,33 +249,20 @@ export default function CropFarmingScreen() {
         <View className="px-5 pt-5">
           <View className="flex-row items-center justify-between">
             <Text className="text-base font-bold text-gray-800">
-              {isKannada ? "ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ" : "Choose language"}
+              {ui.chooseLanguage}
             </Text>
-            <View className="flex-row rounded-xl bg-gray-200 p-1">
-              <Pressable
-                onPress={() => setLanguage("en")}
-                className={`rounded-lg px-4 py-2 ${!isKannada ? "bg-white" : ""}`}
-              >
-                <Text className={`text-sm font-bold ${!isKannada ? "text-green-800" : "text-gray-500"}`}>English</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setLanguage("kn")}
-                className={`rounded-lg px-4 py-2 ${isKannada ? "bg-white" : ""}`}
-              >
-                <Text className={`text-sm font-bold ${isKannada ? "text-green-800" : "text-gray-500"}`}>ಕನ್ನಡ</Text>
-              </Pressable>
-            </View>
+            <LanguageDropdown value={language} onChange={setLanguage} accentColor="#166534" />
           </View>
 
           <Text className="mt-7 text-xl font-bold text-gray-900">
-            {isKannada ? "ಬೆಳೆ ಆಯ್ಕೆ ಮಾಡಿ" : "Select a crop"}
+              {ui.selectCrop}
           </Text>
           <Text className="mt-1 text-sm text-gray-500">
-            {isKannada ? "ನಿಮ್ಮ ಬೆಳೆಗೆ ಸರಳ ಮಾರ್ಗದರ್ಶನ" : "Simple guidance for your field"}
+              {ui.simpleGuidance}
           </Text>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 -mr-5">
-            {crops.map((item) => {
+            {translatedCrops.map((item) => {
               const active = item.key === selectedCrop;
               return (
                 <Pressable
@@ -298,7 +290,7 @@ export default function CropFarmingScreen() {
                   {isKannada ? crop.kannada : crop.name}
                 </Text>
                 <Text className="mt-1 text-xs font-semibold uppercase tracking-wide text-green-700">
-                  {isKannada ? "ಬೆಳೆ ಮಾರ್ಗದರ್ಶಿ" : "Crop guide"}
+                    {ui.cropGuide}
                 </Text>
               </View>
             </View>
@@ -307,7 +299,7 @@ export default function CropFarmingScreen() {
             </Text>
 
             <Text className="mt-6 text-lg font-bold text-gray-900">
-              {isKannada ? "ಹಂತ ಹಂತದ ವಿಧಾನ" : "Step-by-step method"}
+              {ui.steps}
             </Text>
             <View className="mt-3">
               {(isKannada ? crop.kannadaSteps : crop.steps).map((step, index) => (
@@ -324,16 +316,16 @@ export default function CropFarmingScreen() {
           <View className="mt-7 flex-row items-center justify-between">
             <View>
               <Text className="text-xl font-bold text-gray-900">
-                {isKannada ? "ಇನ್ನಷ್ಟು ಕಲಿಯಿರಿ" : "Learn more"}
+                {ui.learnMore}
               </Text>
               <Text className="mt-1 text-sm text-gray-500">
-                {isKannada ? "ವಿಶ್ವಾಸಾರ್ಹ ಲೇಖನಗಳು ಮತ್ತು ವಿಡಿಯೋಗಳು" : "Trusted articles and videos"}
+                {ui.trustedResources}
               </Text>
             </View>
             <MaterialCommunityIcons name="open-in-new" size={21} color="#166534" />
           </View>
 
-          {sources.map((source) => (
+              {translatedSources.map((source) => (
             <Pressable
               key={source.title}
               onPress={() => openSource(source.url)}

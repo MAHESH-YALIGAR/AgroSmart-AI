@@ -28,7 +28,7 @@ const Home = () => {
   const [showProfile, setShowProfile] =
     useState(false);
 
-  const { user } =
+  const { user, locationAddress, locationError } =
     useContext(UserContext);
 
   // console.log("this is  from the user data in home.tsx ",user._id)
@@ -39,6 +39,8 @@ const Home = () => {
       {/* Header */}
       <HomeHeader
         user={user}
+        locationAddress={locationAddress}
+        locationError={locationError}
         onPress={() =>
           setShowProfile(
             !showProfile
@@ -323,8 +325,7 @@ const Home = () => {
       </ScrollView>
 
       <View className="items-center mt-4">
-        <Link href="/components/MapScreen"
-          asChild>
+        <Link href="/components/MapScreen" asChild>
           <TouchableOpacity
             activeOpacity={0.8}
             className="w-16 h-16 rounded-full bg-green-600 items-center justify-center shadow-lg shadow-green-200"

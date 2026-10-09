@@ -20,7 +20,12 @@ import {
   Alert,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { Audio } from "expo-av";
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { speakText, stopSpeech } from "../../services/textToSpeech";
 const BACKEND_API = process.env.EXPO_PUBLIC_PYTHON_BACKEND_API || "http://192.168.244.122:8000";
@@ -156,7 +161,7 @@ const ChatScreen = () => {
     Record<string, { rating: number; comment: string }>
   >({});
   const activeSpeechMessageIdRef = useRef<string | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const listeningPulse = useRef(new Animated.Value(1)).current;
 
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
@@ -226,14 +231,12 @@ const ChatScreen = () => {
   }, [selectedLanguage]);
 
   const handleVoiceInput = useCallback(async () => {
-    if (recordingRef.current) {
-      const recording = recordingRef.current;
-      recordingRef.current = null;
+    if (audioRecorder.isRecording) {
       setIsListening(false);
 
       try {
-        await recording.stopAndUnloadAsync();
-        const recordingUri = recording.getURI();
+        await audioRecorder.stop();
+        const recordingUri = audioRecorder.uri;
 
         if (!recordingUri) {
           throw new Error("The recording did not produce an audio file.");
@@ -288,7 +291,7 @@ const ChatScreen = () => {
         Alert.alert("Voice input", error?.message || "Could not convert the recording to text.");
       } finally {
         try {
-          await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+          await setAudioModeAsync({ allowsRecording: false });
         } catch {
           // ignore audio mode cleanup errors
         }
@@ -298,26 +301,23 @@ const ChatScreen = () => {
     }
 
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
 
       if (!permission.granted) {
         Alert.alert("Microphone permission needed", "Please allow microphone access to record your voice.");
         return;
       }
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-      recordingRef.current = recording;
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       setIsListening(true);
     } catch (error: any) {
       console.log("Voice recording start error:", error);
-      recordingRef.current = null;
       setIsListening(false);
       Alert.alert("Voice input", error?.message || "Could not start recording. Please try again.");
     }
-  }, [selectedLanguage]);
+  }, [audioRecorder, selectedLanguage]);
 
   const handleLanguageSelect = (language: string) => {
     setSelectedLanguage(language);
@@ -392,12 +392,11 @@ const ChatScreen = () => {
 
   useEffect(() => {
     return () => {
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => undefined);
-        recordingRef.current = null;
+      if (audioRecorder.isRecording) {
+        audioRecorder.stop().catch(() => undefined);
       }
     };
-  }, []);
+  }, [audioRecorder]);
 
   const openSidebar = useCallback(() => setSidebarOpen(true), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
