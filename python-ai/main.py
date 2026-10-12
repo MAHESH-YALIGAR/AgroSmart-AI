@@ -369,7 +369,7 @@ async def chat_endpoint(
 
         if tool_summaries:
             reply_text = sanitize_speech_text(f"{reply_text}\n\n{chr(10).join(tool_summaries)}")
-
+        print("the  returining  text to frontned ",reply_text,"--------",response_type,"----",response_data,"---")
         return {
             "status": "success",
             "type": response_type,

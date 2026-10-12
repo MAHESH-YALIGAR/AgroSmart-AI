@@ -48,7 +48,7 @@ exports.createAgroStore = async (req, res) => {
       closingTime,
       description,
       products: products || [],
-      createdBy: req.user?._id, // set by auth middleware
+      // createdBy: req.user?._id, // set by auth middleware
     });
 
     res.status(201).json({ success: true, data: agroStore });

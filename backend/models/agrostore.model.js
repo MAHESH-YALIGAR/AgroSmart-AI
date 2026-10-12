@@ -9,6 +9,7 @@ const storeProductSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+      alias: "name",
     },
 
     availability: {

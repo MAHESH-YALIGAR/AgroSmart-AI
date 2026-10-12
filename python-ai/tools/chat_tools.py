@@ -13,37 +13,60 @@ db = Mongo_client["Agro-Smart-Ai"]  # Database name
 
 
 @tool
-def get_weather(
-    lat: float,
-    lon: float,
-    config: RunnableConfig,
-):
-    """Get weather."""
-
+def get_weather(config: RunnableConfig):
+    """
+    Get the current weather and today's rain chances for the user's location.
+    The user's location is provided automatically.
+    NEVER ask the user for latitude/longitude or their location.
+    Call this tool directly.
+    """
     configurable = config.get("configurable", {})
+    lat = configurable.get("latitude")
+    lon = configurable.get("longitude")
 
-    frontend_lat = configurable.get("latitude")
-    frontend_lon = configurable.get("longitude")
+    print("Weather Latitude:", lat)
+    print("Weather Longitude:", lon)
 
-    print("Frontend Latitude:", frontend_lat)
-    print("Frontend Longitude:", frontend_lon)
-
-    url = "https://api.open-meteo.com/v1/forecast"
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return {"error": "User location not available."}
 
     params = {
-        "latitude": frontend_lat,
-        "longitude": frontend_lon,
-        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure",
+        "latitude": lat,
+        "longitude": lon,
+        "current": (
+            "temperature_2m,relative_humidity_2m,apparent_temperature,"
+            "precipitation,rain,weather_code,wind_speed_10m,"
+            "wind_direction_10m,surface_pressure"
+        ),
         "hourly": "precipitation_probability",
         "daily": "sunrise,sunset",
         "timezone": "auto",
+        "forecast_days": 1,   # only today, keeps the response small
     }
 
-    response = requests.get(url, params=params)
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params=params,
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as e:
+        print("Weather API error:", e)
+        return {"error": "Could not fetch weather right now."}
 
-    return response.json()
-
+    return {
+        "current": data.get("current"),
+        "current_units": data.get("current_units"),
+        "hourly_precipitation_probability": data.get("hourly", {}).get("precipitation_probability"),
+        "hourly_time": data.get("hourly", {}).get("time"),
+        "sunrise": data.get("daily", {}).get("sunrise", [None])[0],
+        "sunset": data.get("daily", {}).get("sunset", [None])[0],
+        "timezone": data.get("timezone"),
+    }
 
 @tool
 def get_market_prices(
@@ -309,11 +332,10 @@ store_collection = db["agrostores"]
 
 import json
 
+import re
 
 @tool
 def get_agro_store(
-    latitude: float,
-    longitude: float,
     config: RunnableConfig,
     product: str = "",
     max_distance_km: float = 100,
@@ -321,71 +343,81 @@ def get_agro_store(
 ):
     """
     Returns nearby agro stores.
-
-    If product is provided:
-        Returns nearby stores where that product is available.
-
-    If product is empty:
-        Returns all nearby agro stores.
+    - If product is given: stores where that product is available.
+    - If product is empty: all nearby agro stores.
+    - If nothing is found within max_distance_km, returns the nearest
+      stores at any distance.
     """
-    # 1. Safely extract coordinates from config, falling back to arguments if missing
     configurable = config.get("configurable", {})
-    lat = configurable.get("latitude", latitude)
-    lon = configurable.get("longitude", longitude)
+    lat = configurable.get("latitude")
+    lon = configurable.get("longitude")
 
-    print("agro store Latitude:", lat)
-    print("agro store Longitude:", lon)
+    try:
+        lat, lon = float(lat), float(lon)
+        print("agro_store tool scredentials",lat,lon)
+    except (TypeError, ValueError):
+        return {"error": "Invalid or missing coordinates"}
 
-    # 2. Build base query
     query = {"isActive": True}
-
-    # 3. Only filter by product if a non-empty string is provided
     if product and product.strip():
         query["products"] = {
             "$elemMatch": {
-                "product": {"$regex": product.strip(), "$options": "i"},
+                "product": {"$regex": re.escape(product.strip()), "$options": "i"},
                 "availability": "Available",
             }
         }
 
-    # 4. Aggregation pipeline (OUTSIDE the if-block so it always executes)
-    stores = list(
-        store_collection.aggregate(
-            [
-                {
-                    "$geoNear": {
-                        "near": {
-                            "type": "Point",
-                            "coordinates": [float(lon), float(lat)],
-                        },
-                        "distanceField": "distance",
-                        "maxDistance": max_distance_km * 1000,
-                        "spherical": True,
-                        "query": query,
-                    }
-                },
+    def search(max_km=None):
+        geo = {
+            "near": {"type": "Point", "coordinates": [lon, lat]},
+            "distanceField": "distance",
+            "spherical": True,
+            "query": query,
+        }
+        if max_km is not None:
+            geo["maxDistance"] = max_km * 1000
+
+        return list(
+            store_collection.aggregate([
+                {"$geoNear": geo},
+                {"$limit": limit},
                 {
                     "$project": {
                         "_id": 0,
-                        "storeName": 1,
-                        "ownerName": 1,
-                        "mobile": 1,
-                        "address": 1,
-                        "state": 1,
-                        "district": 1,
-                        "taluka": 1,
-                        "place": 1,
-                        "openingTime": 1,
-                        "closingTime": 1,
-                        "products": 1,
-                        "location": 1,
+                        "storeName": 1, "ownerName": 1, "mobile": 1,
+                        "address": 1, "state": 1, "district": 1,
+                        "taluka": 1, "place": 1,
+                        "openingTime": 1, "closingTime": 1,
+                        "products": 1, "location": 1,
                         "distance": {"$round": [{"$divide": ["$distance", 1000]}, 2]},
                     }
                 },
-                {"$limit": limit},
-            ]
+            ])
         )
-    )
+
+    # 1. Try within the requested radius
+    stores = search(max_distance_km)
+    expanded = False
+
+    # 2. Fallback: nearest stores at any distance
+    if not stores:
+        stores = search(None)
+        expanded = True
+
+    print("stores info", stores)
+
+    if not stores:
+        return {"message": "No active stores found.", "stores": []}
+
+    return {
+        "message": (
+            f"No stores found within {max_distance_km} km. "
+            "Showing the nearest stores available (distance in km)."
+            if expanded
+            else f"Stores within {max_distance_km} km (distance in km)."
+        ),
+        "stores": stores,
+    }
     print("stores info",stores)
     return json.dumps(stores, indent=2)
 

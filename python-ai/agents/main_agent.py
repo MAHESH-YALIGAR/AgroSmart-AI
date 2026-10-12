@@ -45,6 +45,12 @@ CRITICAL DIRECTIVES FOR THIS CONVERSATION TURN:
 5. If the farmer wants a plant doctor, agricultural expert, or inspection help, automatically trigger 'get_agriculture_experts' using the same crop or disease context.
 6. When stores or experts are found, include their useful details such as name, location, phone number, distance, and any medicine or product names already available at the store.
 """
+    elif prediction_message or custom_output.get("error"):
+        image_context = """
+An image was uploaded, but the vision model could not identify a disease confidently.
+Tell the farmer this clearly and ask for a close, well-lit photo of the affected leaf.
+Do not say that no image was uploaded, and do not guess a disease.
+"""
     else:
         image_context = "\nNo crop image was uploaded for this turn. Use the farmer's typed message as the main request and answer it directly.\n"
 
@@ -87,6 +93,7 @@ If a crop disease or crop issue has already been detected from the image, reuse 
 ---------------------------------------------------
 Use this tool when the farmer asks for medicine, pesticide, fungicide, spray, treatment, or nearby agro store options.
 If a disease or crop issue was detected, use that disease name and suggested treatment context to search nearby agro stores.
+and also  use  this tool when the farmer asks for  show the available agrostores.
 
 ---------------------------------------------------
 {image_context}

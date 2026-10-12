@@ -13,8 +13,11 @@ from typing import Dict
 # MODEL PATH
 # ============================================================
 
-MODEL_PATH = r"D:\resume-project\Agrosmart-AI\python-ai\best_mango_disease_model.pth"
-# MODEL_PATH = r"D:\resume-project\Agrosmart-AI\python-ai\data.pkl"
+MODEL_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "ai_models",
+    "best_mango_disease_model.pth",
+)
 
 
 
@@ -51,7 +54,7 @@ class PlantDiseasePredictor:
             checkpoint = torch.load(
                 self.model_path,
                 map_location=self.device,
-                weights_only=False,
+                weights_only=True,
             )
 
             if not isinstance(checkpoint, dict):
@@ -80,10 +83,10 @@ class PlantDiseasePredictor:
             self.model = self.model.to(self.device)
             self.model.eval()
 
-            print("✅ Plant model loaded successfully!")
+            print("Plant model loaded successfully.")
 
         except Exception as e:
-            print(f"❌ Error loading model: {e}")
+            print(f"Error loading model: {e}")
             raise
 
     # ========================================================
@@ -187,7 +190,7 @@ class PlantDiseasePredictor:
 
             with torch.no_grad():
                 output = self.model(tensor_image)
-                
+                print("model output is the",output)
                 # 1. Get raw scores to evaluate activation health
                 raw_max_logit, _ = torch.max(output, dim=1)
                 raw_logit_value = raw_max_logit.item()
@@ -200,6 +203,7 @@ class PlantDiseasePredictor:
             confidence_value = top2_conf[0][0].item()
             second_confidence = top2_conf[0][1].item()
             predicted_index = top2_classes[0][0].item()
+            print("model stregth are","confidence=",confidence_value,"prediction index=",predicted_index)
 
             confidence_percentage = round(confidence_value * 100, 2)
             confidence_gap = confidence_value - second_confidence
@@ -208,14 +212,14 @@ class PlantDiseasePredictor:
             # If the model is highly confident in one class, the gap should be wide.
             # If it's picking a random class out of confusion, the gap will be very narrow (< 0.20)
             if confidence_gap < 0.25:
-                print(f"⚠️ Rejecting: Model is structurally confused (Gap: {confidence_gap:.4f})")
+                print(f"Rejecting: Model is structurally confused (Gap: {confidence_gap:.4f})")
                 return self._build_error_payload(confidence_percentage)
 
             # 🛑 CRITICAL AUTOMATED FILTER 2: Raw Logit Health Check
             # Real leaf features generate strong positive activations (> 1.8)
             # Blur, textures, and wrong plants produce weak flat responses (< 1.8)
             if raw_logit_value < 1.8:
-                print(f"⚠️ Rejecting: Weak disease visual signatures (Logit: {raw_logit_value:.2f})")
+                print(f"Rejecting: Weak disease visual signatures (Logit: {raw_logit_value:.2f})")
                 return self._build_error_payload(confidence_percentage)
 
             # Standard Threshold Check
@@ -223,6 +227,7 @@ class PlantDiseasePredictor:
                 return self._build_error_payload(confidence_percentage)
 
             plant_name = self.class_names[predicted_index]
+            print()
             return {
                 "detected_issue": plant_name,
                 "confidence": float(confidence_value),
@@ -232,7 +237,7 @@ class PlantDiseasePredictor:
             }
 
         except Exception as e:
-            print(f"❌ Prediction error: {e}")
+            print(f"Prediction error: {e}")
             return {"detected_issue": None, "error": str(e), "status": "error"}
 
     def _build_error_payload(self, conf_pct):

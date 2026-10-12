@@ -58,17 +58,30 @@ const resolveStructuredReply = (reply: any) => {
 
   if (responseType === "expert" || responseType === "experts") {
     return {
-      kind: "experts" as const,
+      kind: responseData.length > 0 ? "experts" as const : "text" as const,
       text: sourceText || "Here are some agro experts near you.",
       data: responseData,
     };
   }
 
   if (responseType === "agro_store" || responseType === "stores") {
+    const stores = responseData.flatMap((entry: any) =>
+      Array.isArray(entry?.stores) ? entry.stores : [entry]
+    );
+    const storeLocations = stores.map((store: any) => {
+      const name = store?.storeName || store?.name || store?.shopName || "Agro Store";
+      const place = store?.address || [store?.place, store?.taluka, store?.district, store?.state].filter(Boolean).join(", ");
+      return place ? `${name}, ${place}` : name;
+    });
+
     return {
-      kind: "stores" as const,
-      text: sourceText || "Here are some agro stores near you.",
-      data: responseData,
+      kind: stores.length > 0 ? "stores" as const : "text" as const,
+      text:
+        sourceText ||
+        (stores.length > 0
+          ? storeLocations.join("\n")
+          : "No nearby agro stores were found."),
+      data: stores,
     };
   }
 
@@ -108,23 +121,6 @@ const resolveStructuredReply = (reply: any) => {
         };
       }
     }
-  }
-
-  const normalizedText = (sourceText || "").toLowerCase();
-  if (normalizedText.includes("experts")) {
-    return {
-      kind: "experts" as const,
-      text: sourceText || "Here are some agro experts near you.",
-      data: [],
-    };
-  }
-
-  if (normalizedText.includes("stores")) {
-    return {
-      kind: "stores" as const,
-      text: sourceText || "Here are some agro stores near you.",
-      data: [],
-    };
   }
 
   return {
@@ -825,12 +821,18 @@ const ChatScreen = () => {
               const store = entry;
               const storeLogo = store?.logo || store?.storeLogo || store?.image || store?.imageUrl;
               const storeName = store?.storeName || store?.name || store?.shopName || "Agro Store";
+              const address = store?.address || [store?.state, store?.district, store?.taluka, store?.place].filter(Boolean).join(", ") || "—";
               const ownerName = store?.ownerName || store?.owner || store?.owner_name || "—";
               const phoneNumber = store?.phoneNumber || store?.phone || store?.contactNumber || store?.mobile || "—";
-              const address = store?.address || [store?.state, store?.district, store?.taluka, store?.place].filter(Boolean).join(", ") || "—";
               const openingTime = store?.openingTime || store?.openTime || "—";
               const closingTime = store?.closingTime || store?.closeTime || "—";
-              const distance = store?.distance || store?.distanceKm || store?.distanceFromUser || "—";
+              const distance = store?.distance ?? store?.distanceKm ?? store?.distanceFromUser ?? "—";
+              const availableProducts = (Array.isArray(store?.products) ? store.products : [])
+                .filter((product: any) =>
+                  typeof product === "string" || !product?.availability || product.availability.toLowerCase() === "available"
+                )
+                .map((product: any) => typeof product === "string" ? product : product?.product || product?.name)
+                .filter(Boolean);
               const { latitude, longitude } = getCoordinates(store);
 
               return (
@@ -850,10 +852,13 @@ const ChatScreen = () => {
                   </View>
 
                   <View className="mt-3 space-y-1">
-                    <Text className="text-sm text-gray-700">📞 {phoneNumber}</Text>
-                    <Text className="text-sm text-gray-700">📍 {address}</Text>
-                    <Text className="text-sm text-gray-700">🕒 {openingTime} - {closingTime}</Text>
-                    <Text className="text-sm text-gray-700">🧭 Distance: {distance}</Text>
+                    <Text className="text-sm text-gray-700">Phone: {phoneNumber}</Text>
+                    <Text className="text-sm text-gray-700">Place: {address}</Text>
+                    <Text className="text-sm text-gray-700">Hours: {openingTime} to {closingTime}</Text>
+                    <Text className="text-sm text-gray-700">
+                      Available products: {availableProducts.length > 0 ? availableProducts.join(", ") : "None listed"}
+                    </Text>
+                    <Text className="text-sm text-gray-700">Distance: {distance} km</Text>
                   </View>
 
                   <View className="flex-row mt-4">
@@ -861,13 +866,13 @@ const ChatScreen = () => {
                       className="flex-1 bg-green-600 rounded-xl py-2.5 mr-2"
                       onPress={() => openGoogleMaps(latitude, longitude)}
                     >
-                      <Text className="text-white text-center font-semibold">📍 View Location</Text>
+                      <Text className="text-white text-center font-semibold">View Location</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className="flex-1 bg-gray-900 rounded-xl py-2.5 ml-2"
                       onPress={() => openPhoneDialer(phoneNumber)}
                     >
-                      <Text className="text-white text-center font-semibold">📞 Call</Text>
+                      <Text className="text-white text-center font-semibold">Call</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -932,6 +937,27 @@ const ChatScreen = () => {
 
         {/* Input + icons row - stays above keyboard because of KeyboardAvoidingView */}
         <View className="px-4 pb-6">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mb-3"
+          >
+            {[
+              { label: "Show agro stores", prompt: "Show nearby agro stores" },
+              { label: "Show agro experts", prompt: "Show nearby agro experts" },
+              { label: "Show today's weather", prompt: "Show today's weather for my location" },
+            ].map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion.label}
+                className="mr-2 rounded-full border border-green-200 bg-green-50 px-3 py-2"
+                activeOpacity={0.8}
+                onPress={() => setMessage(suggestion.prompt)}
+              >
+                <Text className="text-xs font-semibold text-green-800">{suggestion.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           <View className="bg-gray-100 rounded-3xl px-4 py-3 mb-3">
             <TextInput
               value={message}

@@ -321,7 +321,7 @@ export default function AddAgroStorePage() {
       photo: logoPreview,
       ...form,
       products: selectedProducts.map(({ name, availability }) => ({
-        name,
+        product: name,
         availability,
       })),
     };
